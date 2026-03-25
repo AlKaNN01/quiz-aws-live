@@ -1,0 +1,51 @@
+services:
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+
+  postgres:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      POSTGRES_DB: gameadmin
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres123
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  gameadmin:
+    build: ./GameAdmin
+    restart: always
+    ports:
+      - "8081:8081"
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/gameadmin
+      DB_USER: postgres
+      DB_PASSWORD: postgres123
+    depends_on:
+      - postgres
+
+  gameengine:
+    build: ./GameEngine
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      REDIS_HOST: redis
+      GAME_ADMIN_URL: http://gameadmin:8081
+    depends_on:
+      - redis
+      - gameadmin
+
+  frontend:
+    build: ./quiz-frontend
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - gameengine
+      - gameadmin
+
+volumes:
+  postgres_data:

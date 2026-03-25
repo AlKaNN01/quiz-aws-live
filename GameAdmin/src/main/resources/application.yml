@@ -1,0 +1,29 @@
+spring:
+  application:
+    name: GameAdmin
+
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/gameadmin}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:postgres123}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+
+server:
+  port: 8081
+
+app:
+  security:
+    jwt-secret: ${JWT_SECRET:dev-secret-key-degistir-production-da}
+    jwt-expiration-ms: 86400000
+
+logging:
+  level:
+    com.awsokanclub: INFO
