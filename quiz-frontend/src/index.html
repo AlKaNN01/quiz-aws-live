@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AWS Cloud Club Quiz</title>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Baloo+2:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --sky: #7ec8e3;
+      --sky-light: #c5e8f5;
+      --lavender: #a78bfa;
+      --lavender-soft: #ddd6fe;
+      --peach: #fde8d8;
+      --cloud-white: #fffdf9;
+      --aws-orange: #FF9900;
+      --text-dark: #2d2063;
+      --text-mid: #5b5490;
+      --text-soft: #9b97c0;
+      --card-bg: rgba(255,255,255,0.72);
+    }
+
+    html, body {
+      min-height: 100vh;
+      font-family: 'Nunito', sans-serif;
+      overflow-x: hidden;
+    }
+
+    body {
+      background: linear-gradient(160deg, #c5e8f5 0%, #ddd6fe 40%, #fde8d8 80%, #fef3c7 100%);
+      min-height: 100vh;
+      position: relative;
+    }
+
+    /* Floating cloud shapes in background */
+    .bg-clouds {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      overflow: hidden;
+    }
+
+    .bg-cloud {
+      position: absolute;
+      opacity: 0.18;
+      animation: floatCloud linear infinite;
+    }
+
+    .bg-cloud:nth-child(1) { top: 8%; left: -120px; width: 220px; animation-duration: 28s; animation-delay: 0s; }
+    .bg-cloud:nth-child(2) { top: 25%; right: -80px; width: 160px; animation-duration: 22s; animation-delay: -8s; }
+    .bg-cloud:nth-child(3) { top: 60%; left: -100px; width: 180px; animation-duration: 32s; animation-delay: -15s; }
+    .bg-cloud:nth-child(4) { top: 80%; right: -60px; width: 130px; animation-duration: 20s; animation-delay: -5s; }
+    .bg-cloud:nth-child(5) { top: 45%; left: 50%; width: 140px; animation-duration: 35s; animation-delay: -20s; }
+
+    @keyframes floatCloud {
+      0% { transform: translateX(0) translateY(0); }
+      25% { transform: translateX(30px) translateY(-15px); }
+      50% { transform: translateX(60px) translateY(5px); }
+      75% { transform: translateX(30px) translateY(-10px); }
+      100% { transform: translateX(0) translateY(0); }
+    }
+
+    /* Stars / sparkles */
+    .sparkle {
+      position: fixed;
+      pointer-events: none;
+      z-index: 0;
+      animation: twinkle ease-in-out infinite;
+    }
+
+    @keyframes twinkle {
+      0%, 100% { opacity: 0.2; transform: scale(0.8); }
+      50% { opacity: 0.8; transform: scale(1.2); }
+    }
+
+    /* Main layout */
+    .page {
+      position: relative;
+      z-index: 1;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 32px 16px 48px;
+    }
+
+    /* Header */
+    .header {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0;
+      margin-bottom: 8px;
+      animation: slideDown 0.7s cubic-bezier(.34,1.56,.64,1) both;
+    }
+
+    @keyframes slideDown {
+      from { opacity: 0; transform: translateY(-40px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .aws-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255,255,255,0.6);
+      backdrop-filter: blur(8px);
+      border-radius: 999px;
+      padding: 6px 16px 6px 10px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-mid);
+      letter-spacing: 0.04em;
+      border: 1.5px solid rgba(255,255,255,0.8);
+      box-shadow: 0 2px 12px rgba(167,139,250,0.15);
+      margin-bottom: 12px;
+    }
+
+    .aws-logo {
+      font-family: 'Baloo 2', cursive;
+      font-size: 15px;
+      font-weight: 800;
+      color: var(--aws-orange);
+      letter-spacing: -0.02em;
+    }
+
+    /* Fluffy mascot */
+    .mascot-wrap {
+      position: relative;
+      margin-bottom: -12px;
+      animation: floatMascot 4s ease-in-out infinite;
+    }
+
+    @keyframes floatMascot {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-14px); }
+    }
+
+    .mascot-shadow {
+      width: 100px;
+      height: 18px;
+      background: radial-gradient(ellipse, rgba(167,139,250,0.3) 0%, transparent 70%);
+      border-radius: 50%;
+      margin: 0 auto;
+      animation: shadowPulse 4s ease-in-out infinite;
+    }
+
+    @keyframes shadowPulse {
+      0%, 100% { transform: scaleX(1); opacity: 0.6; }
+      50% { transform: scaleX(0.7); opacity: 0.3; }
+    }
+
+    /* Title */
+    .title-block {
+      text-align: center;
+      margin-bottom: 8px;
+      animation: slideDown 0.7s cubic-bezier(.34,1.56,.64,1) 0.1s both;
+    }
+
+    .title {
+      font-family: 'Baloo 2', cursive;
+      font-size: clamp(32px, 7vw, 58px);
+      font-weight: 800;
+      line-height: 1.1;
+      color: var(--text-dark);
+      letter-spacing: -0.02em;
+    }
+
+    .title .highlight {
+      background: linear-gradient(135deg, #a78bfa, #7ec8e3);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .subtitle {
+      font-size: 15px;
+      color: var(--text-mid);
+      font-weight: 600;
+      margin-top: 4px;
+      letter-spacing: 0.01em;
+    }
+
+    /* Cards */
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 20px;
+      width: 100%;
+      max-width: 900px;
+      margin-top: 32px;
+    }
+
+    .card {
+      background: var(--card-bg);
+      backdrop-filter: blur(16px);
+      border-radius: 28px;
+      padding: 32px 28px 28px;
+      border: 2px solid rgba(255,255,255,0.9);
+      box-shadow: 0 8px 32px rgba(100,80,200,0.1), 0 2px 8px rgba(0,0,0,0.05);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      cursor: pointer;
+      transition: transform 0.25s cubic-bezier(.34,1.56,.64,1), box-shadow 0.25s ease;
+      text-decoration: none;
+      animation: cardIn 0.6s cubic-bezier(.34,1.56,.64,1) both;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 28px;
+      opacity: 0;
+      transition: opacity 0.25s;
+    }
+
+    .card:hover { transform: translateY(-8px) scale(1.02); box-shadow: 0 20px 48px rgba(100,80,200,0.18), 0 4px 16px rgba(0,0,0,0.08); }
+    .card:hover::before { opacity: 1; }
+
+    .card-player { animation-delay: 0.15s; }
+    .card-player::before { background: linear-gradient(135deg, rgba(126,200,227,0.08), rgba(167,139,250,0.08)); }
+
+    .card-admin { animation-delay: 0.25s; }
+    .card-admin::before { background: linear-gradient(135deg, rgba(167,139,250,0.08), rgba(253,232,216,0.08)); }
+
+    .card-host { animation-delay: 0.35s; }
+    .card-host::before { background: linear-gradient(135deg, rgba(253,232,216,0.08), rgba(255,153,0,0.08)); }
+
+    @keyframes cardIn {
+      from { opacity: 0; transform: translateY(30px) scale(0.95); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    .card-icon {
+      width: 72px;
+      height: 72px;
+      border-radius: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 36px;
+      position: relative;
+    }
+
+    .card-player .card-icon { background: linear-gradient(135deg, #c5e8f5, #a5d8f0); }
+    .card-admin .card-icon { background: linear-gradient(135deg, #ddd6fe, #c4b5fd); }
+    .card-host .card-icon { background: linear-gradient(135deg, #fde8d8, #fed7aa); }
+
+    .card-title {
+      font-family: 'Baloo 2', cursive;
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--text-dark);
+      letter-spacing: -0.01em;
+    }
+
+    .card-desc {
+      font-size: 13.5px;
+      color: var(--text-soft);
+      text-align: center;
+      line-height: 1.5;
+      font-weight: 600;
+    }
+
+    .card-btn {
+      margin-top: 4px;
+      width: 100%;
+      padding: 13px;
+      border-radius: 14px;
+      border: none;
+      font-family: 'Nunito', sans-serif;
+      font-size: 15px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: transform 0.15s, box-shadow 0.15s;
+      letter-spacing: 0.02em;
+    }
+
+    .card-btn:hover { transform: scale(1.03); }
+    .card-btn:active { transform: scale(0.98); }
+
+    .card-player .card-btn {
+      background: linear-gradient(135deg, #7ec8e3, #5ba8d4);
+      color: white;
+      box-shadow: 0 4px 16px rgba(91,168,212,0.35);
+    }
+
+    .card-admin .card-btn {
+      background: linear-gradient(135deg, #a78bfa, #7c3aed);
+      color: white;
+      box-shadow: 0 4px 16px rgba(124,58,237,0.3);
+    }
+
+    .card-host .card-btn {
+      background: linear-gradient(135deg, #FF9900, #e8820a);
+      color: white;
+      box-shadow: 0 4px 16px rgba(255,153,0,0.35);
+    }
+
+    /* Input sections inside cards */
+    .input-section {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .input-field {
+      width: 100%;
+      padding: 12px 16px;
+      border-radius: 12px;
+      border: 2px solid rgba(167,139,250,0.2);
+      background: rgba(255,255,255,0.8);
+      font-family: 'Nunito', sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-dark);
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .input-field::placeholder { color: var(--text-soft); font-weight: 600; }
+    .input-field:focus { border-color: rgba(167,139,250,0.6); box-shadow: 0 0 0 3px rgba(167,139,250,0.1); }
+
+    .card-admin .input-field:focus { border-color: rgba(124,58,237,0.5); box-shadow: 0 0 0 3px rgba(124,58,237,0.08); }
+    .card-host .input-field:focus { border-color: rgba(255,153,0,0.5); box-shadow: 0 0 0 3px rgba(255,153,0,0.08); }
+
+    /* Footer */
+    .footer {
+      margin-top: 48px;
+      text-align: center;
+      color: var(--text-soft);
+      font-size: 12px;
+      font-weight: 600;
+      animation: fadeIn 1s 0.5s both;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    .footer strong { color: var(--aws-orange); }
+
+    /* Responsive */
+    @media (max-width: 600px) {
+      .cards { grid-template-columns: 1fr; max-width: 380px; }
+      .card { padding: 24px 20px 20px; }
+    }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: rgba(44,32,99,0.92);
+      color: white;
+      padding: 12px 24px;
+      border-radius: 999px;
+      font-size: 14px;
+      font-weight: 700;
+      backdrop-filter: blur(12px);
+      transition: transform 0.4s cubic-bezier(.34,1.56,.64,1);
+      z-index: 100;
+      white-space: nowrap;
+    }
+    .toast.show { transform: translateX(-50%) translateY(0); }
+  </style>
+</head>
+<body>
+
+<!-- Background clouds -->
+<div class="bg-clouds">
+  <svg class="bg-cloud" viewBox="0 0 200 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <ellipse cx="100" cy="80" rx="90" ry="40" fill="#a78bfa"/>
+    <ellipse cx="70" cy="65" rx="45" ry="38" fill="#a78bfa"/>
+    <ellipse cx="130" cy="60" rx="40" ry="35" fill="#a78bfa"/>
+    <ellipse cx="100" cy="55" rx="35" ry="30" fill="#a78bfa"/>
+  </svg>
+  <svg class="bg-cloud" viewBox="0 0 200 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <ellipse cx="100" cy="80" rx="90" ry="40" fill="#7ec8e3"/>
+    <ellipse cx="70" cy="65" rx="45" ry="38" fill="#7ec8e3"/>
+    <ellipse cx="130" cy="60" rx="40" ry="35" fill="#7ec8e3"/>
+    <ellipse cx="100" cy="55" rx="35" ry="30" fill="#7ec8e3"/>
+  </svg>
+  <svg class="bg-cloud" viewBox="0 0 200 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <ellipse cx="100" cy="80" rx="90" ry="40" fill="#FF9900"/>
+    <ellipse cx="70" cy="65" rx="45" ry="38" fill="#FF9900"/>
+    <ellipse cx="130" cy="60" rx="40" ry="35" fill="#FF9900"/>
+    <ellipse cx="100" cy="55" rx="35" ry="30" fill="#FF9900"/>
+  </svg>
+  <svg class="bg-cloud" viewBox="0 0 200 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <ellipse cx="100" cy="80" rx="90" ry="40" fill="#a78bfa"/>
+    <ellipse cx="70" cy="65" rx="45" ry="38" fill="#a78bfa"/>
+    <ellipse cx="130" cy="60" rx="40" ry="35" fill="#a78bfa"/>
+    <ellipse cx="100" cy="55" rx="35" ry="30" fill="#a78bfa"/>
+  </svg>
+  <svg class="bg-cloud" viewBox="0 0 200 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <ellipse cx="100" cy="80" rx="90" ry="40" fill="#7ec8e3"/>
+    <ellipse cx="70" cy="65" rx="45" ry="38" fill="#7ec8e3"/>
+    <ellipse cx="130" cy="60" rx="40" ry="35" fill="#7ec8e3"/>
+    <ellipse cx="100" cy="55" rx="35" ry="30" fill="#7ec8e3"/>
+  </svg>
+</div>
+
+<!-- Sparkles -->
+<div class="sparkle" style="top:12%;left:15%;animation-duration:2.1s;animation-delay:0s;">✦</div>
+<div class="sparkle" style="top:20%;right:18%;animation-duration:1.8s;animation-delay:0.5s;font-size:10px;color:#a78bfa;">✦</div>
+<div class="sparkle" style="top:70%;left:8%;animation-duration:2.5s;animation-delay:1s;font-size:12px;color:#FF9900;">✦</div>
+<div class="sparkle" style="top:55%;right:10%;animation-duration:2s;animation-delay:0.3s;font-size:8px;color:#7ec8e3;">✦</div>
+<div class="sparkle" style="top:85%;left:45%;animation-duration:1.6s;animation-delay:0.8s;color:#a78bfa;">✦</div>
+
+<div class="page">
+  <!-- Header -->
+  <div class="header">
+    <div class="aws-badge">
+      <span class="aws-logo">aws</span>
+      Cloud Club · İstanbul Okan University
+    </div>
+  </div>
+
+  <!-- Fluffy Mascot -->
+  <div class="mascot-wrap">
+    <svg width="140" height="120" viewBox="0 0 140 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <!-- Cloud body -->
+      <ellipse cx="70" cy="82" rx="58" ry="32" fill="#fef3e2"/>
+      <ellipse cx="45" cy="68" rx="30" ry="28" fill="#fef3e2"/>
+      <ellipse cx="95" cy="65" rx="28" ry="25" fill="#fef3e2"/>
+      <ellipse cx="70" cy="60" rx="26" ry="24" fill="#fef3e2"/>
+      <!-- Blush cheeks -->
+      <ellipse cx="46" cy="80" rx="9" ry="6" fill="#f9c5c5" opacity="0.7"/>
+      <ellipse cx="94" cy="80" rx="9" ry="6" fill="#f9c5c5" opacity="0.7"/>
+      <!-- Eyes -->
+      <ellipse cx="58" cy="72" rx="5" ry="5.5" fill="#3d2c6e"/>
+      <ellipse cx="82" cy="72" rx="5" ry="5.5" fill="#3d2c6e"/>
+      <!-- Eye shine -->
+      <ellipse cx="60" cy="70" rx="2" ry="2" fill="white"/>
+      <ellipse cx="84" cy="70" rx="2" ry="2" fill="white"/>
+      <!-- Smile -->
+      <path d="M62 82 Q70 89 78 82" stroke="#3d2c6e" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+      <!-- Little arms -->
+      <ellipse cx="18" cy="88" rx="10" ry="7" fill="#fef3e2" transform="rotate(-20 18 88)"/>
+      <ellipse cx="122" cy="88" rx="10" ry="7" fill="#fef3e2" transform="rotate(20 122 88)"/>
+      <!-- Stars around -->
+      <text x="8" y="55" font-size="14" fill="#FF9900" opacity="0.8">✦</text>
+      <text x="118" y="50" font-size="11" fill="#a78bfa" opacity="0.8">✦</text>
+      <text x="60" y="22" font-size="9" fill="#7ec8e3" opacity="0.8">✦</text>
+    </svg>
+    <div class="mascot-shadow"></div>
+  </div>
+
+  <!-- Title -->
+  <div class="title-block">
+    <div class="title">Merhaba! Ben <span class="highlight">Fluffy</span> 👋</div>
+    <div class="subtitle">AWS Cloud Club Quiz'e hoş geldin ☁️</div>
+  </div>
+
+  <!-- Cards -->
+  <div class="cards">
+
+    <!-- Player Card -->
+    <div class="card card-player">
+      <div class="card-icon">🎮</div>
+      <div class="card-title">Oyuncu Girişi</div>
+      <div class="card-desc">Quiz'e katıl, sorulara cevap ver ve liderlik tablosuna gir!</div>
+      <div class="input-section">
+        <input class="input-field" id="joinCode" type="text" placeholder="Oyun kodu (örn: 64EE36)" maxlength="8" style="text-transform:uppercase;letter-spacing:0.1em;" />
+        <input class="input-field" id="nickname" type="text" placeholder="Nickname'ini gir" maxlength="20" />
+      </div>
+      <button class="card-btn" onclick="joinGame()">Oyuna Katıl ✨</button>
+    </div>
+
+    <!-- Admin Card -->
+    <div class="card card-admin">
+      <div class="card-icon">⚡</div>
+      <div class="card-title">Admin Girişi</div>
+      <div class="card-desc">Quiz oluştur, soruları yönet ve oyunu kontrol et.</div>
+      <div class="input-section">
+        <input class="input-field" id="adminUser" type="text" placeholder="Kullanıcı adı" />
+        <input class="input-field" id="adminPass" type="password" placeholder="Şifre" />
+      </div>
+      <button class="card-btn" onclick="adminLogin()">Admin Paneli 🛡️</button>
+    </div>
+
+    <!-- Host Card -->
+    <div class="card card-host">
+      <div class="card-icon">📡</div>
+      <div class="card-title">Host Girişi</div>
+      <div class="card-desc">Projektöre yansıt, QR kodu göster ve oyunu izle.</div>
+      <div class="input-section">
+        <input class="input-field" id="hostUser" type="text" placeholder="Kullanıcı adı" />
+        <input class="input-field" id="hostPass" type="password" placeholder="Şifre" />
+      </div>
+      <button class="card-btn" onclick="hostLogin()">Host Ekranı 🎯</button>
+    </div>
+
+  </div>
+
+  <div class="footer">
+    Fluffy ile güçlendirildi ☁️ &nbsp;|&nbsp; <strong>AWS Cloud Club</strong> · İstanbul Okan University
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  const API = '';
+
+  function showToast(msg, duration = 3000) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), duration);
+  }
+
+  function joinGame() {
+    const code = document.getElementById('joinCode').value.trim().toUpperCase();
+    const nick = document.getElementById('nickname').value.trim();
+    if (!code) return showToast('⚠️ Oyun kodunu gir!');
+    if (!nick) return showToast('⚠️ Nickname gir!');
+    // GameEngine WebSocket'e bağlanmak için player.html'e yönlendir
+    window.location.href = `player.html?joinCode=${code}&nickname=${encodeURIComponent(nick)}`;
+  }
+
+  async function adminLogin() {
+    const username = document.getElementById('adminUser').value.trim();
+    const password = document.getElementById('adminPass').value;
+    if (!username || !password) return showToast('⚠️ Kullanıcı adı ve şifre gir!');
+    try {
+      const res = await fetch(`${API}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      const data = await res.json();
+      if (data.token && data.role === 'ADMIN') {
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('role', data.role);
+        window.location.href = 'admin.html';
+      } else {
+        showToast('❌ Geçersiz admin bilgileri!');
+      }
+    } catch (e) {
+      showToast('❌ Sunucuya bağlanılamadı!');
+    }
+  }
+
+  async function hostLogin() {
+    const username = document.getElementById('hostUser').value.trim();
+    const password = document.getElementById('hostPass').value;
+    if (!username || !password) return showToast('⚠️ Kullanıcı adı ve şifre gir!');
+    try {
+      const res = await fetch(`${API}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      const data = await res.json();
+      if (data.token && data.role === 'HOST') {
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('role', data.role);
+        window.location.href = 'host.html';
+      } else {
+        showToast('❌ Geçersiz host bilgileri!');
+      }
+    } catch (e) {
+      showToast('❌ Sunucuya bağlanılamadı!');
+    }
+  }
+
+  // Enter key support
+  document.getElementById('nickname').addEventListener('keydown', e => { if (e.key === 'Enter') joinGame(); });
+  document.getElementById('adminPass').addEventListener('keydown', e => { if (e.key === 'Enter') adminLogin(); });
+  document.getElementById('hostPass').addEventListener('keydown', e => { if (e.key === 'Enter') hostLogin(); });
+</script>
+</body>
+</html>

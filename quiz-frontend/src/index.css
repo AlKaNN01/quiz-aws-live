@@ -1,0 +1,43 @@
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Baloo+2:wght@400;600;700;800&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --sky: #7ec8e3;
+  --sky-light: #c5e8f5;
+  --lavender: #a78bfa;
+  --lavender-soft: #ddd6fe;
+  --peach: #fde8d8;
+  --cloud-white: #fffdf9;
+  --aws-orange: #FF9900;
+  --text-dark: #2d2063;
+  --text-mid: #5b5490;
+  --text-soft: #9b97c0;
+  --card-bg: rgba(255,255,255,0.72);
+  --radius: 28px;
+}
+
+html, body, #root {
+  min-height: 100vh;
+  font-family: 'Nunito', sans-serif;
+  overflow-x: hidden;
+}
+
+body {
+  background: linear-gradient(160deg, #c5e8f5 0%, #ddd6fe 40%, #fde8d8 80%, #fef3c7 100%);
+  background-attachment: fixed;
+}
+
+button {
+  cursor: pointer;
+  font-family: 'Nunito', sans-serif;
+}
+
+input {
+  font-family: 'Nunito', sans-serif;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(167,139,250,0.4); border-radius: 99px; }
