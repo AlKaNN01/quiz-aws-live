@@ -1,0 +1,116 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches:
+      - LiveBackend
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Detect changed services
+        id: changes
+        run: |
+          CHANGED=$(git diff --name-only HEAD~1 HEAD)
+          echo "Changed files:"
+          echo "$CHANGED"
+
+          if echo "$CHANGED" | grep -q "^GameAdmin/"; then
+            echo "gameadmin=true" >> $GITHUB_OUTPUT
+          else
+            echo "gameadmin=false" >> $GITHUB_OUTPUT
+          fi
+
+          if echo "$CHANGED" | grep -q "^GameEngine_src/"; then
+            echo "gameengine=true" >> $GITHUB_OUTPUT
+          else
+            echo "gameengine=false" >> $GITHUB_OUTPUT
+          fi
+
+          if echo "$CHANGED" | grep -q "^quiz-frontend/"; then
+            echo "frontend=true" >> $GITHUB_OUTPUT
+          else
+            echo "frontend=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_KEY }}" > ~/.ssh/deploy.pem
+          chmod 600 ~/.ssh/deploy.pem
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Copy GameAdmin sources
+        if: steps.changes.outputs.gameadmin == 'true'
+        run: |
+          rsync -avz --delete \
+            -e "ssh -i ~/.ssh/deploy.pem" \
+            GameAdmin/ \
+            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:~/app/GameAdmin/
+
+      - name: Copy GameEngine sources
+        if: steps.changes.outputs.gameengine == 'true'
+        run: |
+          rsync -avz --delete \
+            -e "ssh -i ~/.ssh/deploy.pem" \
+            GameEngine_src/ \
+            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:~/app/GameEngine_src/
+
+      - name: Copy Frontend sources
+        if: steps.changes.outputs.frontend == 'true'
+        run: |
+          rsync -avz --delete \
+            --exclude='node_modules' \
+            --exclude='.env' \
+            -e "ssh -i ~/.ssh/deploy.pem" \
+            quiz-frontend/ \
+            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:~/app/quiz-frontend/
+
+      - name: Copy root config files
+        run: |
+          rsync -avz \
+            -e "ssh -i ~/.ssh/deploy.pem" \
+            docker-compose.yml nginx-prod.conf \
+            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:~/app/
+
+      - name: Build and restart changed services
+        run: |
+          SERVICES=""
+          if [ "${{ steps.changes.outputs.gameadmin }}" == "true" ]; then
+            SERVICES="$SERVICES gameadmin"
+          fi
+          if [ "${{ steps.changes.outputs.gameengine }}" == "true" ]; then
+            SERVICES="$SERVICES gameengine"
+          fi
+          if [ "${{ steps.changes.outputs.frontend }}" == "true" ]; then
+            SERVICES="$SERVICES frontend"
+          fi
+
+          if [ -z "$SERVICES" ]; then
+            echo "Hiçbir servis değişmedi, deploy atlandı."
+            exit 0
+          fi
+
+          echo "Deploy edilecek servisler:$SERVICES"
+
+          ssh -i ~/.ssh/deploy.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "
+            cd ~/app
+            docker-compose build$SERVICES
+            docker-compose up -d --no-deps$SERVICES
+            echo 'Deploy tamamlandı.'
+            docker-compose ps
+          "
+
+      - name: Health check
+        run: |
+          sleep 15
+          ssh -i ~/.ssh/deploy.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "
+            cd ~/app && docker-compose ps
+          "
