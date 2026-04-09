@@ -41,10 +41,13 @@ function Btn({ onClick, children, color = '#555', disabled = false, small = fals
 }
 
 function StatusBadge({ status }) {
-  const colors = { DRAFT: '#aaa', PUBLISHED: '#3498db', ACTIVE: '#2ecc71', FINISHED: '#e74c3c' };
+  // ACTIVE ve FINISHED eski DB kayıtları için PUBLISHED gibi göster
+  const effective = (status === 'ACTIVE' || status === 'FINISHED') ? 'PUBLISHED' : status;
+  const colors = { DRAFT: '#aaa', PUBLISHED: '#3498db' };
+  const labels = { DRAFT: 'Taslak', PUBLISHED: 'Hazır' };
   return (
-    <span style={{ background: colors[status] || '#aaa', color: '#fff', padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 700 }}>
-      {status}
+    <span style={{ background: colors[effective] || '#aaa', color: '#fff', padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 700 }}>
+      {labels[effective] || effective}
     </span>
   );
 }
@@ -120,6 +123,7 @@ export default function AdminPage() {
   const [scoreReveal, setScoreReveal] = useState(null);
   const [nextQCountdown, setNextQCountdown] = useState(0);
   const [gameFinished, setGameFinished] = useState(null);
+  const [timeLeft, setTimeLeft] = useState(0);
   const [logs, setLogs] = useState([]);
   const [banConfirm, setBanConfirm] = useState(null);
 
@@ -129,6 +133,18 @@ export default function AdminPage() {
 
   useEffect(() => { if (!token) navigate('/'); }, [token, navigate]);
   useEffect(() => { fetchGames(); }, []);
+
+  useEffect(() => {
+    if (!question || questionEnd) { setTimeLeft(0); return; }
+    setTimeLeft(question.timer);
+    const interval = setInterval(() => {
+      setTimeLeft(t => {
+        if (t <= 1) { clearInterval(interval); return 0; }
+        return t - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [question, questionEnd]);
 
   const addLog = (msg) => setLogs(p => [`[${new Date().toLocaleTimeString()}] ${msg}`, ...p.slice(0, 49)]);
 
@@ -242,32 +258,69 @@ export default function AdminPage() {
     }
   }, []);
 
-  const connectWS = () => {
-    const code = joinCode.trim().toUpperCase();
+  const connectWSWithCode = (code) => {
     if (!code) return;
+    addLog(`WS bağlanıyor: ${WS_URL} | kod: ${code}`);
     const client = new Client({
       webSocketFactory: () => new SockJS(WS_URL),
       reconnectDelay: 5000,
-      onConnect: () => {
-        setConnected(true); addLog('Bağlandı');
-        client.subscribe('/user/queue/admin', m => handleMsg(JSON.parse(m.body)));
-        client.subscribe(`/topic/game/${code}/host`, m => handleMsg(JSON.parse(m.body)));
-        client.subscribe(`/topic/game/${code}`, m => handleMsg(JSON.parse(m.body)));
+      onConnect: (frame) => {
+        setConnected(true);
+        addLog(`Bağlandı | session: ${frame?.headers?.['user-name'] || '?'}`);
+        client.subscribe('/user/queue/admin', m => {
+          addLog(`← /user/queue/admin: ${m.body.slice(0, 120)}`);
+          handleMsg(JSON.parse(m.body));
+        });
+        client.subscribe(`/topic/game/${code}/host`, m => {
+          addLog(`← /host: ${m.body.slice(0, 120)}`);
+          handleMsg(JSON.parse(m.body));
+        });
+        client.subscribe(`/topic/game/${code}`, m => {
+          addLog(`← /game: ${m.body.slice(0, 120)}`);
+          handleMsg(JSON.parse(m.body));
+        });
         setScreen(S.WAITING);
       },
-      onDisconnect: () => { setConnected(false); addLog('Bağlantı kesildi'); },
-      onStompError: (f) => addLog(`HATA: ${f.headers?.message || 'stomp error'}`),
+      onDisconnect: () => { setConnected(false); addLog('⚠ Bağlantı kesildi'); },
+      onStompError: (f) => addLog(`✖ STOMP HATA: ${f.headers?.message || JSON.stringify(f.headers)}`),
+      onWebSocketError: (e) => addLog(`✖ WS HATA: ${e?.message || e}`),
+      onWebSocketClose: (e) => addLog(`✖ WS KAPANDI: code=${e?.code} reason=${e?.reason}`),
     });
     client.activate();
     stompRef.current = client;
   };
 
-  const wsSend = (dest, body) => stompRef.current?.publish({
-    destination: `/app/${dest}`,
-    body: JSON.stringify({ ...body, adminToken: token }),
-  });
+  const connectWS = () => {
+    const code = joinCode.trim().toUpperCase();
+    connectWSWithCode(code);
+  };
 
-  const startGame          = () => { wsSend('admin.start', { joinCode: joinCode.toUpperCase() }); addLog('Oyun başlatıldı'); };
+  const wsSend = (dest, body) => {
+    const c = stompRef.current;
+    if (!c) { addLog(`✖ wsSend: stompRef null [${dest}]`); return; }
+    if (!c.connected) { addLog(`✖ wsSend: bağlı değil (state=${c.state}) [${dest}]`); return; }
+    const payload = JSON.stringify({ ...body, adminToken: token });
+    addLog(`→ /app/${dest} | ${payload.slice(0, 100)}`);
+    c.publish({ destination: `/app/${dest}`, body: payload });
+  };
+
+  // Quiz için yeni oturum başlatır: REST → sessionCode → WS bağlantısı
+  const startSession = async (gameId) => {
+    try {
+      const d = await apiFetch(`/api/games/${gameId}/start`, 'POST');
+      if (!d?.sessionCode) { setApiError('Session kodu alınamadı'); return; }
+      const code = d.sessionCode.toUpperCase();
+      setJoinCode(code);
+      addLog(`Oturum başlatıldı: ${code}`);
+      // WS bağlantısını hemen kur
+      connectWSWithCode(code);
+    } catch {
+      setApiError('Oyun başlatılamadı');
+    }
+  };
+
+
+  const startGame          = () => { addLog('▶ startGame tetiklendi'); wsSend('admin.start', { joinCode: joinCode.toUpperCase() }); };
   const endQuestion        = () => { wsSend('admin.end.question', { joinCode: joinCode.toUpperCase() }); addLog('Soru bitirildi'); };
   const approveLeaderboard = () => {
     if (!leaderboard) return;
@@ -323,7 +376,7 @@ export default function AdminPage() {
       {/* ═══ SOL PANEL ═══ */}
       <div style={{ width: 420, background: '#fff', borderRight: '1px solid #e0e0e0', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <div style={{ padding: '14px 16px', background: '#1a1a2e', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontWeight: 700, fontSize: 15 }}>📚 Quiz Yönetimi</span>
+          <span style={{ fontWeight: 700, fontSize: 15 }}>📚 Quiz Kütüphanesi</span>
           <button onClick={() => { localStorage.removeItem('token'); navigate('/'); }}
             style={{ background: 'transparent', border: '1px solid #555', color: '#aaa', padding: '4px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}>Çıkış</button>
         </div>
@@ -332,7 +385,7 @@ export default function AdminPage() {
           {['games', 'questions'].map(tab => (
             <button key={tab} onClick={() => setQuizTab(tab)}
               style={{ flex: 1, padding: '10px 0', background: quizTab === tab ? '#f5f0ff' : '#fff', border: 'none', borderBottom: quizTab === tab ? '2px solid #7c3aed' : '2px solid transparent', cursor: 'pointer', fontSize: 13, fontWeight: quizTab === tab ? 700 : 400, color: quizTab === tab ? '#7c3aed' : '#666' }}>
-              {tab === 'games' ? '🎮 Oyunlar' : `❓ Sorular${selectedGame ? ` (${selectedGame.title})` : ''}`}
+              {tab === 'games' ? '📚 Quizler' : `❓ Sorular${selectedGame ? ` (${selectedGame.title})` : ''}`}
             </button>
           ))}
         </div>
@@ -348,7 +401,7 @@ export default function AdminPage() {
           {quizTab === 'games' && (
             <>
               <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-                <Inp value={newGameTitle} onChange={setNewGameTitle} placeholder="Yeni oyun adı..." />
+                <Inp value={newGameTitle} onChange={setNewGameTitle} placeholder="Yeni quiz adı..." />
                 <Btn onClick={createGame} color="#7c3aed">+ Oluştur</Btn>
               </div>
               {games.length === 0 && <p style={{ color: '#aaa', textAlign: 'center', marginTop: 30 }}>Henüz oyun yok</p>}
@@ -365,8 +418,10 @@ export default function AdminPage() {
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                     <Btn onClick={() => fetchGame(g.id)} color="#3498db" small>Soruları Düzenle</Btn>
                     {g.status === 'DRAFT' && <Btn onClick={() => publishGame(g.id)} color="#2ecc71" small>▶ Yayınla</Btn>}
-                    {g.joinCode && <Btn onClick={() => { setJoinCode(g.joinCode); setQuizTab('games'); }} color="#FF9900" small>🎮 Oyunu Başlat</Btn>}
-                    <Btn onClick={() => deleteGame(g.id)} color="#e74c3c" small>Sil</Btn>
+                    {(g.status === 'PUBLISHED' || g.status === 'ACTIVE' || g.status === 'FINISHED') && (
+                      <Btn onClick={() => startSession(g.id)} color="#FF9900" small>🎮 Oyun Başlat</Btn>
+                    )}
+                    {g.status === 'DRAFT' && <Btn onClick={() => deleteGame(g.id)} color="#e74c3c" small>Sil</Btn>}
                   </div>
                 </div>
               ))}
@@ -487,7 +542,7 @@ export default function AdminPage() {
               </div>
               {question ? (
                 <div style={{ background: '#fff', borderRadius: 12, padding: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.08)', marginBottom: 16 }}>
-                  <p style={{ color: '#888', margin: '0 0 8px', fontSize: 13 }}>Soru {question.index + 1}/{question.total} · ⏱ {question.timer}s</p>
+                  <p style={{ color: '#888', margin: '0 0 8px', fontSize: 13 }}>Soru {question.index + 1}/{question.total} · ⏱ <span style={{ color: timeLeft <= 5 ? '#e74c3c' : 'inherit', fontWeight: timeLeft <= 5 ? 700 : 'normal' }}>{timeLeft}s</span></p>
                   <h3 style={{ margin: '0 0 16px', fontSize: 18 }}>{question.text}</h3>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 16 }}>
                     {Object.entries(question.options).map(([k, v]) => (
@@ -559,7 +614,13 @@ export default function AdminPage() {
               <div style={{ background: '#fff', borderRadius: 12, overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', marginBottom: 20 }}>
                 <LeaderboardTable top10={gameFinished || []} showBan={false} onBan={() => {}} />
               </div>
-              <Btn onClick={() => { setScreen(S.SETUP); setGameFinished(null); setConnected(false); stompRef.current?.deactivate(); }} color="#3498db">
+              <Btn onClick={() => {
+                stompRef.current?.deactivate();
+                setScreen(S.SETUP); setGameFinished(null); setConnected(false);
+                setJoinCode(''); setQuestion(null); setQuestionEnd(null);
+                setLeaderboard(null); setScoreReveal(null); setPlayerCount(0);
+                fetchGames();
+              }} color="#3498db">
                 🔄 Yeni Oyun
               </Btn>
             </div>
