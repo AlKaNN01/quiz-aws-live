@@ -40,77 +40,67 @@ jobs:
             echo "frontend=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Setup SSH
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.EC2_KEY }}" > ~/.ssh/deploy.pem
-          chmod 600 ~/.ssh/deploy.pem
-          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
-
       - name: Copy GameAdmin sources
         if: steps.changes.outputs.gameadmin == 'true'
-        run: |
-          rsync -avz --delete \
-            -e "ssh -i ~/.ssh/deploy.pem" \
-            GameAdmin/ \
-            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:~/app/GameAdmin/
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_KEY }}
+          source: "GameAdmin/"
+          target: "~/app/GameAdmin"
+          strip_components: 1
 
       - name: Copy GameEngine sources
         if: steps.changes.outputs.gameengine == 'true'
-        run: |
-          rsync -avz --delete \
-            -e "ssh -i ~/.ssh/deploy.pem" \
-            GameEngine_src/ \
-            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:~/app/GameEngine_src/
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_KEY }}
+          source: "GameEngine_src/"
+          target: "~/app/GameEngine_src"
+          strip_components: 1
 
       - name: Copy Frontend sources
         if: steps.changes.outputs.frontend == 'true'
-        run: |
-          rsync -avz --delete \
-            --exclude='node_modules' \
-            --exclude='.env' \
-            -e "ssh -i ~/.ssh/deploy.pem" \
-            quiz-frontend/ \
-            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:~/app/quiz-frontend/
-
-      - name: Copy root config files
-        run: |
-          rsync -avz \
-            -e "ssh -i ~/.ssh/deploy.pem" \
-            docker-compose.yml nginx-prod.conf \
-            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:~/app/
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_KEY }}
+          source: "quiz-frontend/"
+          target: "~/app/quiz-frontend"
+          strip_components: 1
 
       - name: Build and restart changed services
-        run: |
-          SERVICES=""
-          if [ "${{ steps.changes.outputs.gameadmin }}" == "true" ]; then
-            SERVICES="$SERVICES gameadmin"
-          fi
-          if [ "${{ steps.changes.outputs.gameengine }}" == "true" ]; then
-            SERVICES="$SERVICES gameengine"
-          fi
-          if [ "${{ steps.changes.outputs.frontend }}" == "true" ]; then
-            SERVICES="$SERVICES frontend"
-          fi
-
-          if [ -z "$SERVICES" ]; then
-            echo "Hiçbir servis değişmedi, deploy atlandı."
-            exit 0
-          fi
-
-          echo "Deploy edilecek servisler:$SERVICES"
-
-          ssh -i ~/.ssh/deploy.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_KEY }}
+          script: |
             cd ~/app
-            docker-compose build$SERVICES
-            docker-compose up -d --no-deps$SERVICES
-            echo 'Deploy tamamlandı.'
-            docker-compose ps
-          "
 
-      - name: Health check
-        run: |
-          sleep 15
-          ssh -i ~/.ssh/deploy.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "
-            cd ~/app && docker-compose ps
-          "
+            SERVICES=""
+            if [ "${{ steps.changes.outputs.gameadmin }}" == "true" ]; then
+              SERVICES="$SERVICES gameadmin"
+            fi
+            if [ "${{ steps.changes.outputs.gameengine }}" == "true" ]; then
+              SERVICES="$SERVICES gameengine"
+            fi
+            if [ "${{ steps.changes.outputs.frontend }}" == "true" ]; then
+              SERVICES="$SERVICES frontend"
+            fi
+
+            if [ -z "$SERVICES" ]; then
+              echo "Hicbir servis degismedi, deploy atlandi."
+              docker-compose ps
+              exit 0
+            fi
+
+            echo "Deploy edilecek servisler: $SERVICES"
+            docker-compose build $SERVICES
+            docker-compose up -d --no-deps $SERVICES
+            echo "Deploy tamamlandi."
+            docker-compose ps
