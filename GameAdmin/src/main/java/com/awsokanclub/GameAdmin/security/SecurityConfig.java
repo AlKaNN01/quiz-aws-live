@@ -39,6 +39,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/api/games/engine/**").permitAll()
                         .requestMatchers("/api/games/*/results").permitAll()
+                        .requestMatchers("/api/games/session/*/end").permitAll()
                         .requestMatchers("/actuator/**").permitAll()
                         .anyRequest().authenticated()
                 )

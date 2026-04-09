@@ -419,7 +419,7 @@ export default function AdminPage() {
                     <Btn onClick={() => fetchGame(g.id)} color="#3498db" small>Soruları Düzenle</Btn>
                     {g.status === 'DRAFT' && <Btn onClick={() => publishGame(g.id)} color="#2ecc71" small>▶ Yayınla</Btn>}
                     {(g.status === 'PUBLISHED' || g.status === 'ACTIVE' || g.status === 'FINISHED') && (
-                      <Btn onClick={() => startSession(g.id)} color="#FF9900" small>🎮 Oyun Başlat</Btn>
+                      <Btn onClick={() => startSession(g.id)} color="#FF9900" small>🎮 Oyunu Oluştur</Btn>
                     )}
                     {g.status === 'DRAFT' && <Btn onClick={() => deleteGame(g.id)} color="#e74c3c" small>Sil</Btn>}
                   </div>
