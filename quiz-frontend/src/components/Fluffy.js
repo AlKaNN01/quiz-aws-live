@@ -12,71 +12,87 @@ export default function Fluffy({ size = 160, animate = true }) {
           50% { transform: translateY(-10px); }
         }
       `}</style>
-      <svg 
-        width={size} 
-        height={size} 
-        viewBox="0 0 200 200" 
-        fill="none" 
+      <svg
+        width={size}
+        height={size}
+        viewBox="0 0 220 180"
+        fill="none"
         xmlns="http://www.w3.org/2000/svg"
       >
-        {/* === ARKA PLAN === */}
-        <rect width="200" height="200" rx="20" fill="#5A94C6" />
+        <defs>
+          <radialGradient id="fluffyBody" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(110 92) rotate(90) scale(88 108)">
+            <stop offset="0" stopColor="#FFFDF5" />
+            <stop offset="0.72" stopColor="#FFF3DD" />
+            <stop offset="1" stopColor="#F5DDBE" />
+          </radialGradient>
+          <radialGradient id="fluffyCheek" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(0 0) scale(1)">
+            <stop offset="0" stopColor="#F7B5B2" />
+            <stop offset="1" stopColor="#F7B5B2" stopOpacity="0" />
+          </radialGradient>
+          <filter id="fluffyShadow" x="0" y="18" width="220" height="150" filterUnits="userSpaceOnUse" colorInterpolationFilters="sRGB">
+            <feGaussianBlur stdDeviation="10" />
+          </filter>
+        </defs>
 
-        {/* === BULUT GÖVDESİ === */}
-        {/* Pofuduk lobları görseldeki gibi asimetrik ve yuvarlak olarak ayarladım */}
-        <path 
-          d="
-            M 55 130
-            C 25 125, 25 85, 45 80
-            C 40 55, 75 45, 85 60
-            C 85 30, 125 30, 125 60
-            C 135 45, 170 55, 165 80
-            C 185 85, 185 125, 155 130
-            C 140 145, 70 145, 55 130 Z
-          " 
-          fill="#FFF6E5" 
-          stroke="#3E2723" 
-          strokeWidth="5" 
-          strokeLinejoin="round" 
-        />
+        <ellipse cx="110" cy="148" rx="60" ry="12" fill="#2F0C52" opacity="0.16" filter="url(#fluffyShadow)" />
 
-        {/* === ELLER / PATİLER === */}
-        {/* Patilerin iç içe geçmiş W/V şeklini oluşturmak için iki ayrı path kullandım */}
-        {/* Sol Pati */}
-        <path 
-          d="M 60 132 C 75 110, 105 115, 105 135 C 105 145, 95 155, 80 148 C 70 143, 60 138, 60 132 Z" 
-          fill="#FFF6E5" 
-          stroke="#3E2723" 
-          strokeWidth="5" 
-          strokeLinejoin="round"
-        />
-        {/* Sağ Pati */}
-        <path 
-          d="M 150 132 C 135 110, 105 115, 105 135 C 105 145, 115 155, 130 148 C 140 143, 150 138, 150 132 Z" 
-          fill="#FFF6E5" 
-          stroke="#3E2723" 
-          strokeWidth="5" 
+        <path
+          d="M40 120C24 119 15 107 15 92C15 77 26 67 42 66C41 44 56 31 75 31C82 18 96 12 111 14C126 8 144 11 153 24C173 23 188 36 189 55C205 58 214 72 214 88C214 108 201 120 182 120H40Z"
+          fill="url(#fluffyBody)"
+          stroke="#3A241A"
+          strokeWidth="4"
+          strokeLinecap="round"
           strokeLinejoin="round"
         />
 
-        {/* === YÜZ DETAYLARI === */}
-        
-        {/* Pembe Yanaklar */}
-        <ellipse cx="70" cy="105" rx="9" ry="6" fill="#FFAAA5" />
-        <ellipse cx="140" cy="105" rx="9" ry="6" fill="#FFAAA5" />
-
-        {/* Gözler */}
-        <circle cx="85" cy="95" r="5.5" fill="#3E2723" />
-        <circle cx="125" cy="95" r="5.5" fill="#3E2723" />
-
-        {/* Gülümseme */}
-        <path 
-          d="M 98 103 C 98 112, 112 112, 112 103" 
-          fill="none" 
-          stroke="#3E2723" 
-          strokeWidth="5" 
-          strokeLinecap="round" 
+        <path
+          d="M71 122C77 113 87 108 97 109C102 110 106 114 106 120C106 131 95 137 84 136C78 136 73 130 71 122Z"
+          fill="#FBE8CF"
+          stroke="#3A241A"
+          strokeWidth="4"
+          strokeLinecap="round"
+          strokeLinejoin="round"
         />
+        <path
+          d="M149 122C143 113 133 108 123 109C118 110 114 114 114 120C114 131 125 137 136 136C142 136 147 130 149 122Z"
+          fill="#FBE8CF"
+          stroke="#3A241A"
+          strokeWidth="4"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+
+        <path
+          d="M84 111C90 115 96 123 99 130"
+          stroke="#3A241A"
+          strokeWidth="4.5"
+          strokeLinecap="round"
+        />
+        <path
+          d="M136 111C130 115 124 123 121 130"
+          stroke="#3A241A"
+          strokeWidth="4.5"
+          strokeLinecap="round"
+        />
+        <path
+          d="M100 130C103 125 106 122 110 122C114 122 117 125 120 130"
+          stroke="#3A241A"
+          strokeWidth="4.5"
+          strokeLinecap="round"
+        />
+
+        <ellipse cx="74" cy="95" rx="10" ry="12" fill="#3A241A" />
+        <ellipse cx="146" cy="95" rx="10" ry="12" fill="#3A241A" />
+        <path
+          d="M94 107C100 116 120 116 126 107"
+          stroke="#3A241A"
+          strokeWidth="5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+
+        <ellipse cx="58" cy="107" rx="16" ry="10" fill="url(#fluffyCheek)" />
+        <ellipse cx="162" cy="107" rx="16" ry="10" fill="url(#fluffyCheek)" />
       </svg>
     </div>
   );

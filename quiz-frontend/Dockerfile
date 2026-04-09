@@ -3,6 +3,13 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install
 COPY . .
+
+# Build-time env vars — docker-compose args ile geçirilir
+ARG REACT_APP_API_URL
+ARG REACT_APP_WS_URL
+ENV REACT_APP_API_URL=$REACT_APP_API_URL
+ENV REACT_APP_WS_URL=$REACT_APP_WS_URL
+
 RUN npm run build
 
 FROM nginx:alpine

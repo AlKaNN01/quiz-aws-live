@@ -3,49 +3,120 @@ services:
   redis:
     image: redis:7-alpine
     restart: always
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - appnet
 
   postgres:
     image: postgres:16-alpine
     restart: always
+    env_file:
+      - .env
     environment:
       POSTGRES_DB: gameadmin
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres123
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - appnet
 
   gameadmin:
     build: ./GameAdmin
     restart: always
-    ports:
-      - "8081:8081"
+    expose:
+      - "8081"
+    env_file:
+      - .env
     environment:
-      DB_URL: jdbc:postgresql://postgres:5432/gameadmin
-      DB_USER: postgres
-      DB_PASSWORD: postgres123
+      DB_URL: ${DB_URL}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      ENGINE_TOKEN: ${ENGINE_TOKEN}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      HOST_PASSWORD: ${HOST_PASSWORD}
+      ALLOWED_ORIGINS: https://${DOMAIN:-localhost}
+    # Both local postgres OR RDS supported
+    # If using RDS, postgres container is ignored (depends_on optional)
     depends_on:
-      - postgres
+      redis:
+        condition: service_healthy
+    networks:
+      - appnet
 
   gameengine:
-    build: ./GameEngine
+    build: ./GameEngine_src
     restart: always
-    ports:
-      - "8080:8080"
+    expose:
+      - "8080"
+    env_file:
+      - .env
     environment:
-      REDIS_HOST: redis
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_PORT: ${REDIS_PORT}
       GAME_ADMIN_URL: http://gameadmin:8081
+      JWT_SECRET: ${JWT_SECRET}
+      ENGINE_TOKEN: ${ENGINE_TOKEN}
+      ALLOWED_ORIGINS: https://${DOMAIN:-localhost}
     depends_on:
-      - redis
-      - gameadmin
+      redis:
+        condition: service_healthy
+      gameadmin:
+        condition: service_started
+    networks:
+      - appnet
 
   frontend:
-    build: ./quiz-frontend
+    build:
+      context: ./quiz-frontend
+      args:
+        REACT_APP_API_URL: https://${DOMAIN:-localhost}
+        REACT_APP_WS_URL: https://${DOMAIN:-localhost}/ws
     restart: always
-    ports:
-      - "80:80"
+    expose:
+      - "3000"
     depends_on:
       - gameengine
       - gameadmin
+    networks:
+      - appnet
+
+  nginx:
+    image: nginx:alpine
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx-prod.conf:/etc/nginx/nginx.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+    environment:
+      DOMAIN: ${DOMAIN:-yourdomain.com}
+    depends_on:
+      - frontend
+      - gameadmin
+      - gameengine
+    networks:
+      - appnet
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   postgres_data:
+
+networks:
+  appnet:
+    driver: bridge
