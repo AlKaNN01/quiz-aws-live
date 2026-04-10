@@ -28,7 +28,7 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ secrets.GHCR_TOKEN }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -78,7 +78,6 @@ jobs:
           command_timeout: 10m
           envs: GHCR_TOKEN,GHCR_USER
           script: |
-            # ghcr.io login
             echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
 
             # Config dosyalarını güncelle (docker-compose.yml, nginx vb.)
@@ -101,5 +100,5 @@ jobs:
             echo "=== Deploy tamamlandi ==="
             docker ps --format 'table {{.Names}}\t{{.Status}}'
         env:
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
           GHCR_USER: ${{ github.actor }}
