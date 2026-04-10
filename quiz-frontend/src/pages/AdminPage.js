@@ -1,8 +1,12 @@
 /*
  * Admin sayfası — Sol: Quiz Yönetimi | Sağ: Oyun Kontrolü
- * FIX 1: Inp, Btn, StatusBadge, LeaderboardTable, LogPanel component'leri AdminPage DIŞINA taşındı.
- * FIX 2: addQuestion — orderIndex artık qForm'dan değil, anlık questions.length'ten hesaplanıyor.
- * FIX 3: sorular her zaman orderIndex'e göre sıralı gösteriliyor.
+ *
+ * Yeni Lobi Akışı:
+ * 1. Quiz seç (sol panel) → sağ panelde "Oyun Oluştur" görünür
+ * 2. "Oyun Oluştur" → session açılır, WS bağlanır → WAITING_HOST ekranı
+ * 3. Host bağlanınca → HOST_CONNECTED → LOBBY_CLOSED ekranı + "Lobiyi Aç" butonu
+ * 4. "Lobiyi Aç" → admin.open.lobby → oyuncular join edebilir → WAITING ekranı
+ * 5. "Oyunu Başlat" → mevcut oyun akışı
  */
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -12,8 +16,14 @@ import { Client } from '@stomp/stompjs';
 import { WS_URL, API_URL as API } from '../config';
 
 const S = {
-  SETUP: 'SETUP', WAITING: 'WAITING', QUESTION_ACTIVE: 'QUESTION_ACTIVE',
-  LEADERBOARD_PENDING: 'LEADERBOARD_PENDING', SCORE_REVEAL: 'SCORE_REVEAL', FINISHED: 'FINISHED',
+  SETUP: 'SETUP',
+  WAITING_HOST: 'WAITING_HOST',
+  LOBBY_CLOSED: 'LOBBY_CLOSED',
+  WAITING: 'WAITING',
+  QUESTION_ACTIVE: 'QUESTION_ACTIVE',
+  LEADERBOARD_PENDING: 'LEADERBOARD_PENDING',
+  SCORE_REVEAL: 'SCORE_REVEAL',
+  FINISHED: 'FINISHED',
 };
 
 const MEDALS = ['🥇', '🥈', '🥉'];
@@ -41,7 +51,6 @@ function Btn({ onClick, children, color = '#555', disabled = false, small = fals
 }
 
 function StatusBadge({ status }) {
-  // ACTIVE ve FINISHED eski DB kayıtları için PUBLISHED gibi göster
   const effective = (status === 'ACTIVE' || status === 'FINISHED') ? 'PUBLISHED' : status;
   const colors = { DRAFT: '#aaa', PUBLISHED: '#3498db' };
   const labels = { DRAFT: 'Taslak', PUBLISHED: 'Hazır' };
@@ -101,15 +110,21 @@ export default function AdminPage() {
   const navigate = useNavigate();
   const token = localStorage.getItem('token') || '';
 
+  // ── Quiz yönetimi ───────────────────────────────────────────
   const [games, setGames] = useState([]);
-  const [selectedGame, setSelectedGame] = useState(null);
+  const [selectedGameForSession, setSelectedGameForSession] = useState(null); // sağ panel için seçili quiz
   const [newGameTitle, setNewGameTitle] = useState('');
+  const [editingGameId, setEditingGameId] = useState(null);
+  const [editingGameTitle, setEditingGameTitle] = useState('');
+  const [expandedGameId, setExpandedGameId] = useState(null); // soru düzenleme için expand
+  const [expandedGame, setExpandedGame] = useState(null);     // expand edilen oyunun detayı
   const EMPTY_FORM = { text: '', optionA: '', optionB: '', optionC: '', optionD: '', correctAnswer: 'A', timerSeconds: 20 };
   const [qForm, setQForm] = useState(EMPTY_FORM);
   const [editingQId, setEditingQId] = useState(null);
-  const [quizTab, setQuizTab] = useState('games');
   const [apiError, setApiError] = useState('');
+  const [deleteConfirm, setDeleteConfirm] = useState(null); // silinecek quiz id
 
+  // ── Oyun kontrolü ──────────────────────────────────────────
   const [screen, setScreen] = useState(S.SETUP);
   const [joinCode, setJoinCode] = useState('');
   const [connected, setConnected] = useState(false);
@@ -159,7 +174,10 @@ export default function AdminPage() {
   };
 
   const fetchGames = () => apiFetch('/api/games').then(setGames).catch(() => setApiError('Oyunlar yüklenemedi'));
-  const fetchGame  = (id) => apiFetch(`/api/games/${id}`).then(d => { setSelectedGame(d); setQuizTab('questions'); }).catch(() => setApiError('Oyun yüklenemedi'));
+
+  const fetchExpandedGame = (id) => apiFetch(`/api/games/${id}`)
+    .then(d => { setExpandedGame(d); })
+    .catch(() => setApiError('Oyun yüklenemedi'));
 
   const createGame = async () => {
     if (!newGameTitle.trim()) return;
@@ -170,40 +188,59 @@ export default function AdminPage() {
 
   const deleteGame = async (id) => {
     await apiFetch(`/api/games/${id}`, 'DELETE').catch(() => setApiError('Silinemedi'));
-    if (selectedGame?.id === id) { setSelectedGame(null); setQuizTab('games'); }
+    if (selectedGameForSession?.id === id) setSelectedGameForSession(null);
+    if (expandedGameId === id) { setExpandedGameId(null); setExpandedGame(null); }
+    setDeleteConfirm(null);
     fetchGames();
   };
 
   const publishGame = async (id) => {
     const d = await apiFetch(`/api/games/${id}/publish`, 'POST').catch(() => setApiError('Yayınlanamadı'));
-    if (d) { setSelectedGame(d); fetchGames(); }
+    if (d) fetchGames();
   };
 
-  // FIX 2: orderIndex qForm'dan gelmiyor — mevcut soru sayısı + 1 olarak hesaplanıyor.
-  // Böylece edit işlemi form'u doldursa bile yeni soru eklerken sıra hiç bozulmuyor.
+  const saveGameTitle = async (id) => {
+    if (!editingGameTitle.trim()) return;
+    await apiFetch(`/api/games/${id}`, 'PUT', { title: editingGameTitle.trim() }).catch(() => setApiError('Güncellenemedi'));
+    setEditingGameId(null);
+    fetchGames();
+  };
+
+  const toggleExpand = (g) => {
+    if (expandedGameId === g.id) {
+      setExpandedGameId(null);
+      setExpandedGame(null);
+    } else {
+      setExpandedGameId(g.id);
+      setExpandedGame(null);
+      fetchExpandedGame(g.id);
+    }
+    setQForm(EMPTY_FORM);
+    setEditingQId(null);
+  };
+
   const addQuestion = async () => {
-    if (!selectedGame || !qForm.text.trim()) return;
-    const orderIndex = (selectedGame.questions?.length || 0) + 1;
-    await apiFetch(`/api/games/${selectedGame.id}/questions`, 'POST', { ...qForm, orderIndex })
+    if (!expandedGame || !qForm.text.trim()) return;
+    const orderIndex = (expandedGame.questions?.length || 0) + 1;
+    await apiFetch(`/api/games/${expandedGame.id}/questions`, 'POST', { ...qForm, orderIndex })
       .catch(() => setApiError('Soru eklenemedi'));
-    fetchGame(selectedGame.id);
+    fetchExpandedGame(expandedGame.id);
     setQForm(EMPTY_FORM);
   };
 
   const updateQuestion = async (qId) => {
-    // edit sırasında orderIndex değişmiyor — mevcut orderIndex korunuyor
-    const original = selectedGame.questions.find(q => q.id === qId);
-    await apiFetch(`/api/games/${selectedGame.id}/questions/${qId}`, 'PUT', {
+    const original = expandedGame.questions.find(q => q.id === qId);
+    await apiFetch(`/api/games/${expandedGame.id}/questions/${qId}`, 'PUT', {
       ...qForm,
       orderIndex: original?.orderIndex ?? qForm.orderIndex,
     }).catch(() => setApiError('Güncellenemedi'));
-    fetchGame(selectedGame.id);
+    fetchExpandedGame(expandedGame.id);
     setEditingQId(null);
     setQForm(EMPTY_FORM);
   };
 
-  const deleteQuestion = (qId) => apiFetch(`/api/games/${selectedGame.id}/questions/${qId}`, 'DELETE')
-    .then(() => fetchGame(selectedGame.id)).catch(() => setApiError('Silinemedi'));
+  const deleteQuestion = (qId) => apiFetch(`/api/games/${expandedGame.id}/questions/${qId}`, 'DELETE')
+    .then(() => fetchExpandedGame(expandedGame.id)).catch(() => setApiError('Silinemedi'));
 
   const startEdit = (q) => {
     setEditingQId(q.id);
@@ -213,7 +250,15 @@ export default function AdminPage() {
   const handleMsg = useCallback((msg) => {
     addLog(`← ${msg.type}`);
     switch (msg.type) {
-      case 'HOST_WAITING_UPDATE': setPlayerCount(msg.playerCount); break;
+      case 'HOST_CONNECTED':
+        setScreen(S.LOBBY_CLOSED);
+        break;
+      case 'LOBBY_OPENED':
+        setScreen(S.WAITING);
+        break;
+      case 'HOST_WAITING_UPDATE':
+        setPlayerCount(msg.playerCount);
+        break;
       case 'GAME_STARTED':
         setScreen(S.QUESTION_ACTIVE); setQuestion(null); setAnswerCount(0);
         break;
@@ -279,7 +324,12 @@ export default function AdminPage() {
           addLog(`← /game: ${m.body.slice(0, 120)}`);
           handleMsg(JSON.parse(m.body));
         });
-        setScreen(S.WAITING);
+        // Admin principalName'ini kaydet (HOST_CONNECTED için gerekli)
+        client.publish({
+          destination: '/app/admin.connect',
+          body: JSON.stringify({ joinCode: code, adminToken: token }),
+        });
+        setScreen(S.WAITING_HOST);
       },
       onDisconnect: () => { setConnected(false); addLog('⚠ Bağlantı kesildi'); },
       onStompError: (f) => addLog(`✖ STOMP HATA: ${f.headers?.message || JSON.stringify(f.headers)}`),
@@ -290,58 +340,55 @@ export default function AdminPage() {
     stompRef.current = client;
   };
 
-  const connectWS = () => {
-    const code = joinCode.trim().toUpperCase();
-    connectWSWithCode(code);
-  };
-
-  const wsSend = (dest, body) => {
-    const c = stompRef.current;
-    if (!c) { addLog(`✖ wsSend: stompRef null [${dest}]`); return; }
-    if (!c.connected) { addLog(`✖ wsSend: bağlı değil (state=${c.state}) [${dest}]`); return; }
-    const payload = JSON.stringify({ ...body, adminToken: token });
-    addLog(`→ /app/${dest} | ${payload.slice(0, 100)}`);
-    c.publish({ destination: `/app/${dest}`, body: payload });
-  };
-
-  // Quiz için yeni oturum başlatır: REST → sessionCode → WS bağlantısı
-  const startSession = async (gameId) => {
+  const startSession = async (game) => {
     try {
-      const d = await apiFetch(`/api/games/${gameId}/start`, 'POST');
+      const d = await apiFetch(`/api/games/${game.id}/start`, 'POST');
       if (!d?.sessionCode) { setApiError('Session kodu alınamadı'); return; }
       const code = d.sessionCode.toUpperCase();
       setJoinCode(code);
       addLog(`Oturum başlatıldı: ${code}`);
-      // WS bağlantısını hemen kur
       connectWSWithCode(code);
     } catch {
       setApiError('Oyun başlatılamadı');
     }
   };
 
+  const wsSend = (dest, body) => {
+    const c = stompRef.current;
+    if (!c) { addLog(`✖ wsSend: stompRef null [${dest}]`); return; }
+    if (!c.connected) { addLog(`✖ wsSend: bağlı değil [${dest}]`); return; }
+    const payload = JSON.stringify({ ...body, adminToken: token });
+    addLog(`→ /app/${dest} | ${payload.slice(0, 100)}`);
+    c.publish({ destination: `/app/${dest}`, body: payload });
+  };
 
-  const startGame          = () => { addLog('▶ startGame tetiklendi'); wsSend('admin.start', { joinCode: joinCode.toUpperCase() }); };
-  const endQuestion        = () => { wsSend('admin.end.question', { joinCode: joinCode.toUpperCase() }); addLog('Soru bitirildi'); };
+  const openLobby         = () => wsSend('admin.open.lobby', { joinCode });
+  const startGame         = () => wsSend('admin.start', { joinCode });
+  const endQuestion       = () => wsSend('admin.end.question', { joinCode });
   const approveLeaderboard = () => {
     if (!leaderboard) return;
-    wsSend('admin.leaderboard.approve', { gameId: joinCode.toUpperCase(), questionId: leaderboard.questionId });
-    clearInterval(autoRef.current); addLog('Leaderboard onaylandı');
+    wsSend('admin.leaderboard.approve', { gameId: joinCode, questionId: leaderboard.questionId });
+    clearInterval(autoRef.current);
   };
-  const finishGame = () => { wsSend('admin.finish', { joinCode: joinCode.toUpperCase() }); addLog('Oyun bitirildi'); };
+  const finishGame = () => wsSend('admin.finish', { joinCode });
 
   const requestBan = (player) => setBanConfirm(player);
   const confirmBan = () => {
     if (!banConfirm) return;
-    wsSend('admin.ban', {
-      gameId: joinCode.toUpperCase(),
-      sessionId: banConfirm.sessionId || '',
-      userId: banConfirm.userId || '',
-      reason: 'Admin ban',
-    });
+    wsSend('admin.ban', { gameId: joinCode, sessionId: banConfirm.sessionId || '', userId: banConfirm.userId || '', reason: 'Admin ban' });
     addLog(`Ban: ${banConfirm.nickname || banConfirm.userId}`);
     if (leaderboard) setLeaderboard(lb => ({ ...lb, top10: lb.top10.filter(p => p.userId !== banConfirm.userId) }));
     if (scoreReveal) setScoreReveal(sr => ({ ...sr, top10: sr.top10.filter(p => p.userId !== banConfirm.userId) }));
     setBanConfirm(null);
+  };
+
+  const resetGame = () => {
+    stompRef.current?.deactivate();
+    setScreen(S.SETUP); setGameFinished(null); setConnected(false);
+    setJoinCode(''); setQuestion(null); setQuestionEnd(null);
+    setLeaderboard(null); setScoreReveal(null); setPlayerCount(0);
+    setSelectedGameForSession(null);
+    fetchGames();
   };
 
   useEffect(() => () => {
@@ -349,21 +396,21 @@ export default function AdminPage() {
     stompRef.current?.deactivate();
   }, []);
 
-  // FIX 3: Sorular her zaman orderIndex'e göre sıralı gösteriliyor
-  const sortedQuestions = selectedGame?.questions
-    ? [...selectedGame.questions].sort((a, b) => a.orderIndex - b.orderIndex)
+  const sortedQuestions = expandedGame?.questions
+    ? [...expandedGame.questions].sort((a, b) => a.orderIndex - b.orderIndex)
     : [];
 
   return (
     <div style={{ fontFamily: 'system-ui, sans-serif', display: 'flex', height: '100vh', overflow: 'hidden', background: '#f0f2f5' }}>
 
+      {/* ── Ban onay modal ── */}
       {banConfirm && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ background: '#fff', borderRadius: 14, padding: 28, width: 340, boxShadow: '0 8px 32px rgba(0,0,0,0.25)' }}>
             <h3 style={{ margin: '0 0 12px', color: '#e74c3c' }}>🚫 Oyuncu Banla</h3>
             <p style={{ margin: '0 0 20px', fontSize: 15, lineHeight: 1.5 }}>
               <strong>{banConfirm.nickname || banConfirm.userId}</strong> adlı oyuncuyu banlamak istediğine emin misin?<br />
-              <span style={{ color: '#888', fontSize: 13 }}>Bu işlem geri alınamaz. Oyuncu bağlantısı kesilecek.</span>
+              <span style={{ color: '#888', fontSize: 13 }}>Bu işlem geri alınamaz.</span>
             </p>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
               <Btn onClick={() => setBanConfirm(null)} color="#888">İptal</Btn>
@@ -373,21 +420,29 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* ═══ SOL PANEL ═══ */}
+      {/* ── Quiz silme onay modal ── */}
+      {deleteConfirm && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: '#fff', borderRadius: 14, padding: 28, width: 340, boxShadow: '0 8px 32px rgba(0,0,0,0.25)' }}>
+            <h3 style={{ margin: '0 0 12px', color: '#e74c3c' }}>🗑 Quiz Sil</h3>
+            <p style={{ margin: '0 0 20px', fontSize: 15, lineHeight: 1.5 }}>
+              <strong>{deleteConfirm.title}</strong> quizini silmek istediğine emin misin?<br />
+              <span style={{ color: '#888', fontSize: 13 }}>Tüm sorular da silinecek. Bu işlem geri alınamaz.</span>
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+              <Btn onClick={() => setDeleteConfirm(null)} color="#888">İptal</Btn>
+              <Btn onClick={() => deleteGame(deleteConfirm.id)} color="#e74c3c">Evet, Sil</Btn>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ SOL PANEL — Quiz Kütüphanesi ═══ */}
       <div style={{ width: 420, background: '#fff', borderRight: '1px solid #e0e0e0', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <div style={{ padding: '14px 16px', background: '#1a1a2e', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontWeight: 700, fontSize: 15 }}>📚 Quiz Kütüphanesi</span>
           <button onClick={() => { localStorage.removeItem('token'); navigate('/'); }}
             style={{ background: 'transparent', border: '1px solid #555', color: '#aaa', padding: '4px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}>Çıkış</button>
-        </div>
-
-        <div style={{ display: 'flex', borderBottom: '1px solid #eee' }}>
-          {['games', 'questions'].map(tab => (
-            <button key={tab} onClick={() => setQuizTab(tab)}
-              style={{ flex: 1, padding: '10px 0', background: quizTab === tab ? '#f5f0ff' : '#fff', border: 'none', borderBottom: quizTab === tab ? '2px solid #7c3aed' : '2px solid transparent', cursor: 'pointer', fontSize: 13, fontWeight: quizTab === tab ? 700 : 400, color: quizTab === tab ? '#7c3aed' : '#666' }}>
-              {tab === 'games' ? '📚 Quizler' : `❓ Sorular${selectedGame ? ` (${selectedGame.title})` : ''}`}
-            </button>
-          ))}
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: 14 }}>
@@ -398,142 +453,255 @@ export default function AdminPage() {
             </div>
           )}
 
-          {quizTab === 'games' && (
-            <>
-              <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-                <Inp value={newGameTitle} onChange={setNewGameTitle} placeholder="Yeni quiz adı..." />
-                <Btn onClick={createGame} color="#7c3aed">+ Oluştur</Btn>
-              </div>
-              {games.length === 0 && <p style={{ color: '#aaa', textAlign: 'center', marginTop: 30 }}>Henüz oyun yok</p>}
-              {games.map(g => (
-                <div key={g.id} style={{ background: '#f9f9f9', border: '1px solid #eee', borderRadius: 10, padding: '12px 14px', marginBottom: 10 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                    <strong style={{ fontSize: 15 }}>{g.title}</strong>
-                    <StatusBadge status={g.status} />
-                  </div>
-                  <div style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>
-                    {g.joinCode ? <span>Kod: <strong style={{ letterSpacing: '0.1em' }}>{g.joinCode}</strong></span> : <span>Yayınlanmamış</span>}
-                    {' · '}{g.questions?.length || 0} soru
-                  </div>
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    <Btn onClick={() => fetchGame(g.id)} color="#3498db" small>Soruları Düzenle</Btn>
-                    {g.status === 'DRAFT' && <Btn onClick={() => publishGame(g.id)} color="#2ecc71" small>▶ Yayınla</Btn>}
-                    {(g.status === 'PUBLISHED' || g.status === 'ACTIVE' || g.status === 'FINISHED') && (
-                      <Btn onClick={() => startSession(g.id)} color="#FF9900" small>🎮 Oyunu Oluştur</Btn>
-                    )}
-                    {g.status === 'DRAFT' && <Btn onClick={() => deleteGame(g.id)} color="#e74c3c" small>Sil</Btn>}
-                  </div>
-                </div>
-              ))}
-            </>
-          )}
+          {/* Yeni quiz oluştur */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+            <Inp value={newGameTitle} onChange={setNewGameTitle} placeholder="Yeni quiz adı..." />
+            <Btn onClick={createGame} color="#7c3aed">+ Oluştur</Btn>
+          </div>
 
-          {quizTab === 'questions' && selectedGame && (
-            <>
-              <button onClick={() => setQuizTab('games')} style={{ background: 'none', border: 'none', color: '#7c3aed', cursor: 'pointer', fontSize: 13, marginBottom: 10, padding: 0 }}>← Oyunlara Dön</button>
-              <div style={{ background: '#f5f0ff', border: '1px solid #d0b0ff', borderRadius: 10, padding: 14, marginBottom: 14 }}>
-                <strong style={{ fontSize: 14 }}>{editingQId ? '✏️ Düzenle' : '+ Yeni Soru'}</strong>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
-                  <textarea value={qForm.text} onChange={e => setQForm(f => ({ ...f, text: e.target.value }))}
-                    placeholder="Soru metni..." rows={2}
-                    style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, resize: 'vertical', fontFamily: 'inherit' }} />
-                  {['A', 'B', 'C', 'D'].map(k => (
-                    <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ width: 16, fontWeight: 700, color: OPT[k] }}>{k}</span>
-                      <Inp value={qForm[`option${k}`]} onChange={v => setQForm(f => ({ ...f, [`option${k}`]: v }))}
-                        placeholder={`Şık ${k}`} style={{ borderLeft: `3px solid ${OPT[k]}` }} />
+          {games.length === 0 && <p style={{ color: '#aaa', textAlign: 'center', marginTop: 30 }}>Henüz quiz yok</p>}
+
+          {games.map(g => {
+            const isSelected = selectedGameForSession?.id === g.id && screen === S.SETUP;
+            const isExpanded = expandedGameId === g.id;
+            return (
+              <div key={g.id} style={{ background: isSelected ? '#f0ebff' : '#f9f9f9', border: `1px solid ${isSelected ? '#7c3aed' : '#eee'}`, borderRadius: 10, marginBottom: 10, overflow: 'hidden' }}>
+                <div style={{ padding: '12px 14px' }}>
+                  {/* Başlık satırı */}
+                  {editingGameId === g.id ? (
+                    <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+                      <input
+                        value={editingGameTitle}
+                        onChange={e => setEditingGameTitle(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') saveGameTitle(g.id); if (e.key === 'Escape') setEditingGameId(null); }}
+                        autoFocus
+                        style={{ flex: 1, padding: '6px 10px', borderRadius: 6, border: '2px solid #7c3aed', fontSize: 14 }}
+                      />
+                      <Btn onClick={() => saveGameTitle(g.id)} color="#2ecc71" small>✓</Btn>
+                      <Btn onClick={() => setEditingGameId(null)} color="#888" small>✕</Btn>
                     </div>
-                  ))}
-                  <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-                    <label style={{ fontSize: 13 }}>✅ Doğru:
-                      <select value={qForm.correctAnswer} onChange={e => setQForm(f => ({ ...f, correctAnswer: e.target.value }))}
-                        style={{ marginLeft: 6, padding: '5px 8px', borderRadius: 6, border: '1px solid #ddd', background: OPT[qForm.correctAnswer], color: '#fff', fontWeight: 700 }}>
-                        {['A', 'B', 'C', 'D'].map(k => <option key={k} value={k}>{k}</option>)}
-                      </select>
-                    </label>
-                    <label style={{ fontSize: 13 }}>⏱ Süre:
-                      <select value={qForm.timerSeconds} onChange={e => setQForm(f => ({ ...f, timerSeconds: Number(e.target.value) }))}
-                        style={{ marginLeft: 6, padding: '5px 8px', borderRadius: 6, border: '1px solid #ddd' }}>
-                        {[10, 15, 20, 30, 45, 60].map(t => <option key={t} value={t}>{t}s</option>)}
-                      </select>
-                    </label>
+                  ) : (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                      <strong style={{ fontSize: 15 }}>{g.title}</strong>
+                      <StatusBadge status={g.status} />
+                    </div>
+                  )}
+
+                  <div style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>
+                    {g.questions?.length || 0} soru
                   </div>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    {editingQId
-                      ? <>
-                          <Btn onClick={() => updateQuestion(editingQId)} color="#2ecc71">💾 Kaydet</Btn>
-                          <Btn onClick={() => { setEditingQId(null); setQForm(EMPTY_FORM); }} color="#888">İptal</Btn>
-                        </>
-                      : <Btn onClick={addQuestion} color="#7c3aed">+ Ekle</Btn>}
+
+                  {/* Butonlar */}
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    <Btn onClick={() => {
+                      setEditingGameId(g.id);
+                      setEditingGameTitle(g.title);
+                    }} color="#3498db" small>✏️ Düzenle</Btn>
+
+                    <Btn onClick={() => toggleExpand(g)} color={isExpanded ? '#555' : '#9b59b6'} small>
+                      {isExpanded ? '▲ Kapat' : '❓ Sorular'}
+                    </Btn>
+
+                    {g.status === 'DRAFT' && (
+                      <Btn onClick={() => publishGame(g.id)} color="#2ecc71" small>▶ Yayınla</Btn>
+                    )}
+
+                    {(g.status === 'PUBLISHED' || g.status === 'ACTIVE' || g.status === 'FINISHED') && screen === S.SETUP && (
+                      <Btn onClick={() => setSelectedGameForSession(g)} color="#FF9900" small>🎮 Seç</Btn>
+                    )}
+
+                    <Btn onClick={() => setDeleteConfirm(g)} color="#e74c3c" small>🗑 Sil</Btn>
                   </div>
                 </div>
-              </div>
 
-              {sortedQuestions.length === 0
-                ? <p style={{ color: '#aaa', textAlign: 'center' }}>Henüz soru yok</p>
-                : sortedQuestions.map((q, i) => (
-                  <div key={q.id} style={{ background: '#fff', border: '1px solid #eee', borderRadius: 10, padding: '12px 14px', marginBottom: 8 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                      <p style={{ margin: 0, fontSize: 14, flex: 1, marginRight: 8 }}><strong>{i + 1}.</strong> {q.text}</p>
-                      <div style={{ display: 'flex', gap: 4 }}>
-                        <Btn onClick={() => startEdit(q)} color="#3498db" small>✏️</Btn>
-                        <Btn onClick={() => deleteQuestion(q.id)} color="#e74c3c" small>🗑</Btn>
+                {/* Inline soru düzenleyici */}
+                {isExpanded && (
+                  <div style={{ borderTop: '1px solid #e0d0ff', background: '#faf5ff', padding: 14 }}>
+                    {/* Soru formu */}
+                    <div style={{ background: '#fff', border: '1px solid #d0b0ff', borderRadius: 10, padding: 14, marginBottom: 12 }}>
+                      <strong style={{ fontSize: 13 }}>{editingQId ? '✏️ Soruyu Düzenle' : '+ Yeni Soru'}</strong>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
+                        <textarea value={qForm.text} onChange={e => setQForm(f => ({ ...f, text: e.target.value }))}
+                          placeholder="Soru metni..." rows={2}
+                          style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 13, resize: 'vertical', fontFamily: 'inherit' }} />
+                        {['A', 'B', 'C', 'D'].map(k => (
+                          <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ width: 16, fontWeight: 700, color: OPT[k] }}>{k}</span>
+                            <Inp value={qForm[`option${k}`]} onChange={v => setQForm(f => ({ ...f, [`option${k}`]: v }))}
+                              placeholder={`Şık ${k}`} style={{ borderLeft: `3px solid ${OPT[k]}`, fontSize: 13 }} />
+                          </div>
+                        ))}
+                        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+                          <label style={{ fontSize: 12 }}>✅ Doğru:
+                            <select value={qForm.correctAnswer} onChange={e => setQForm(f => ({ ...f, correctAnswer: e.target.value }))}
+                              style={{ marginLeft: 6, padding: '4px 6px', borderRadius: 6, border: '1px solid #ddd', background: OPT[qForm.correctAnswer], color: '#fff', fontWeight: 700 }}>
+                              {['A', 'B', 'C', 'D'].map(k => <option key={k} value={k}>{k}</option>)}
+                            </select>
+                          </label>
+                          <label style={{ fontSize: 12 }}>⏱ Süre:
+                            <select value={qForm.timerSeconds} onChange={e => setQForm(f => ({ ...f, timerSeconds: Number(e.target.value) }))}
+                              style={{ marginLeft: 6, padding: '4px 6px', borderRadius: 6, border: '1px solid #ddd' }}>
+                              {[10, 15, 20, 30, 45, 60].map(t => <option key={t} value={t}>{t}s</option>)}
+                            </select>
+                          </label>
+                        </div>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          {editingQId
+                            ? <>
+                                <Btn onClick={() => updateQuestion(editingQId)} color="#2ecc71" small>💾 Kaydet</Btn>
+                                <Btn onClick={() => { setEditingQId(null); setQForm(EMPTY_FORM); }} color="#888" small>İptal</Btn>
+                              </>
+                            : <Btn onClick={addQuestion} color="#7c3aed" small>+ Ekle</Btn>}
+                        </div>
                       </div>
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, marginTop: 8 }}>
-                      {['A', 'B', 'C', 'D'].map(k => (
-                        <span key={k} style={{ fontSize: 12, padding: '3px 8px', borderRadius: 6, background: k === q.correctAnswer ? OPT[k] : '#f0f0f0', color: k === q.correctAnswer ? '#fff' : '#555' }}>
-                          {k}) {q[`option${k}`]}
-                        </span>
-                      ))}
-                    </div>
-                    <div style={{ marginTop: 4, fontSize: 11, color: '#aaa' }}>⏱ {q.timerSeconds}s</div>
+
+                    {/* Soru listesi */}
+                    {expandedGame === null
+                      ? <p style={{ color: '#aaa', fontSize: 13, textAlign: 'center' }}>Yükleniyor...</p>
+                      : sortedQuestions.length === 0
+                        ? <p style={{ color: '#aaa', fontSize: 13, textAlign: 'center' }}>Henüz soru yok</p>
+                        : sortedQuestions.map((q, i) => (
+                          <div key={q.id} style={{ background: '#fff', border: '1px solid #eee', borderRadius: 8, padding: '10px 12px', marginBottom: 6 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                              <p style={{ margin: 0, fontSize: 13, flex: 1, marginRight: 8 }}><strong>{i + 1}.</strong> {q.text}</p>
+                              <div style={{ display: 'flex', gap: 4 }}>
+                                <Btn onClick={() => startEdit(q)} color="#3498db" small>✏️</Btn>
+                                <Btn onClick={() => deleteQuestion(q.id)} color="#e74c3c" small>🗑</Btn>
+                              </div>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, marginTop: 6 }}>
+                              {['A', 'B', 'C', 'D'].map(k => (
+                                <span key={k} style={{ fontSize: 11, padding: '2px 6px', borderRadius: 5, background: k === q.correctAnswer ? OPT[k] : '#f0f0f0', color: k === q.correctAnswer ? '#fff' : '#555' }}>
+                                  {k}) {q[`option${k}`]}
+                                </span>
+                              ))}
+                            </div>
+                            <div style={{ marginTop: 4, fontSize: 11, color: '#aaa' }}>⏱ {q.timerSeconds}s</div>
+                          </div>
+                        ))}
                   </div>
-                ))}
-            </>
-          )}
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
 
-      {/* ═══ SAĞ PANEL ═══ */}
+      {/* ═══ SAĞ PANEL — Oyun Kontrolü ═══ */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <div style={{ padding: '12px 16px', background: '#2d2063', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontWeight: 700, fontSize: 15 }}>
             🎮 Oyun Kontrolü
-            {joinCode && <span style={{ color: '#f39c12', marginLeft: 8, letterSpacing: '0.1em' }}>{joinCode.toUpperCase()}</span>}
+            {joinCode && <span style={{ color: '#f39c12', marginLeft: 8, letterSpacing: '0.1em' }}>{joinCode}</span>}
           </span>
           <span style={{ fontSize: 13, color: connected ? '#2ecc71' : '#e74c3c' }}>{connected ? '● Bağlı' : '○ Bağlı Değil'}</span>
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: 20 }}>
 
+          {/* SETUP: quiz seçilmemiş veya seçildi, oyun başlatılmadı */}
           {screen === S.SETUP && (
-            <div style={{ maxWidth: 420 }}>
-              <p style={{ color: '#666', fontSize: 14 }}>Oyun kodunu gir. Sol panelden "🎮 Oyunu Başlat"a basarak da otomatik doldurabilirsin.</p>
-              <div style={{ display: 'flex', gap: 10 }}>
-                <Inp value={joinCode} onChange={v => setJoinCode(v.toUpperCase())} placeholder="Oyun Kodu (örn: 216B87)"
-                  style={{ fontSize: 20, letterSpacing: '0.1em', textTransform: 'uppercase' }} />
-                <Btn onClick={connectWS} color="#2d2063">▶ Bağlan</Btn>
-              </div>
+            <div style={{ maxWidth: 500 }}>
+              {!selectedGameForSession ? (
+                <div style={{ textAlign: 'center', marginTop: 60, color: '#888' }}>
+                  <div style={{ fontSize: 48, marginBottom: 16 }}>📚</div>
+                  <p style={{ fontSize: 16 }}>Sol panelden bir quiz seçin</p>
+                  <p style={{ fontSize: 13 }}>Hazır (Yayınlanmış) bir quizi seçerek oyun oluşturabilirsiniz.</p>
+                </div>
+              ) : (
+                <div style={{ background: '#fff', borderRadius: 14, padding: 28, boxShadow: '0 2px 12px rgba(0,0,0,0.08)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+                    <div>
+                      <h2 style={{ margin: '0 0 6px', fontSize: 22 }}>{selectedGameForSession.title}</h2>
+                      <span style={{ fontSize: 13, color: '#888' }}>{selectedGameForSession.questions?.length || 0} soru</span>
+                    </div>
+                    <StatusBadge status={selectedGameForSession.status} />
+                  </div>
+                  <p style={{ color: '#666', fontSize: 14, marginBottom: 20 }}>
+                    Oyun oluşturulunca benzersiz bir katılım kodu üretilir. Host ekranı bağlanana kadar oyuncular lobiye giremez.
+                  </p>
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <Btn onClick={() => startSession(selectedGameForSession)} color="#7c3aed">🎮 Oyun Oluştur</Btn>
+                    <Btn onClick={() => setSelectedGameForSession(null)} color="#888">← İptal</Btn>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
-          {screen === S.WAITING && (
-            <div>
-              <div style={{ display: 'flex', gap: 16, marginBottom: 20 }}>
-                <div style={{ background: '#fff', borderRadius: 12, padding: 24, textAlign: 'center', flex: 1, boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
-                  <p style={{ margin: 0, color: '#888', fontSize: 13 }}>Bağlı Oyuncu</p>
-                  <p style={{ margin: 0, fontSize: 52, fontWeight: 700 }}>{playerCount}</p>
+          {/* WAITING_HOST: session oluştu, host bağlanmadı */}
+          {screen === S.WAITING_HOST && (
+            <div style={{ maxWidth: 500 }}>
+              <div style={{ background: '#fff', borderRadius: 14, padding: 28, boxShadow: '0 2px 12px rgba(0,0,0,0.08)', marginBottom: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 20 }}>
+                  <div style={{ width: 52, height: 52, background: '#fff3cd', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26 }}>
+                    🖥️
+                  </div>
+                  <div>
+                    <h3 style={{ margin: 0 }}>Host Bağlanması Bekleniyor</h3>
+                    <p style={{ margin: '4px 0 0', color: '#888', fontSize: 13 }}>Host ekranı bu koda bağlanana kadar lobi açılamaz.</p>
+                  </div>
                 </div>
-                <div style={{ background: '#fff', borderRadius: 12, padding: 20, flex: 1, boxShadow: '0 2px 8px rgba(0,0,0,0.08)', display: 'flex', flexDirection: 'column', gap: 10, justifyContent: 'center' }}>
-                  <Btn onClick={startGame} color="#2ecc71" disabled={playerCount === 0}>▶ Oyunu Başlat</Btn>
-                  <Btn onClick={() => setScreen(S.SETUP)} color="#888">← Farklı Oyun</Btn>
+                <div style={{ background: '#f5f0ff', borderRadius: 10, padding: '16px 20px', textAlign: 'center', marginBottom: 16 }}>
+                  <p style={{ margin: '0 0 6px', fontSize: 13, color: '#888' }}>Oyun Kodu</p>
+                  <p style={{ margin: 0, fontSize: 36, fontWeight: 700, letterSpacing: '0.15em', color: '#7c3aed' }}>{joinCode}</p>
+                </div>
+                <p style={{ fontSize: 13, color: '#888', textAlign: 'center' }}>Host ekranında bu kodu girerek bağlanın.</p>
+                <div style={{ marginTop: 16 }}>
+                  <Btn onClick={resetGame} color="#888">← Geri Dön</Btn>
                 </div>
               </div>
               <LogPanel logs={logs} />
             </div>
           )}
 
+          {/* LOBBY_CLOSED: host bağlandı, lobi henüz açılmadı */}
+          {screen === S.LOBBY_CLOSED && (
+            <div style={{ maxWidth: 500 }}>
+              <div style={{ background: '#fff', borderRadius: 14, padding: 28, boxShadow: '0 2px 12px rgba(0,0,0,0.08)', marginBottom: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 20 }}>
+                  <div style={{ width: 52, height: 52, background: '#d5f5e3', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26 }}>
+                    ✅
+                  </div>
+                  <div>
+                    <h3 style={{ margin: 0, color: '#27ae60' }}>Host Bağlandı!</h3>
+                    <p style={{ margin: '4px 0 0', color: '#888', fontSize: 13 }}>Lobiyi açarak oyuncuların katılmasına izin verebilirsiniz.</p>
+                  </div>
+                </div>
+                <div style={{ background: '#f5f0ff', borderRadius: 10, padding: '12px 20px', textAlign: 'center', marginBottom: 20 }}>
+                  <p style={{ margin: '0 0 4px', fontSize: 13, color: '#888' }}>Oyun Kodu</p>
+                  <p style={{ margin: 0, fontSize: 34, fontWeight: 700, letterSpacing: '0.15em', color: '#7c3aed' }}>{joinCode}</p>
+                </div>
+                <Btn onClick={openLobby} color="#2ecc71">🚪 Lobiyi Aç</Btn>
+              </div>
+              <LogPanel logs={logs} />
+            </div>
+          )}
+
+          {/* WAITING: lobi açık, oyuncu bekleniyor */}
+          {screen === S.WAITING && (
+            <div style={{ maxWidth: 500 }}>
+              <div style={{ display: 'flex', gap: 16, marginBottom: 20 }}>
+                <div style={{ background: '#fff', borderRadius: 12, padding: 24, textAlign: 'center', flex: 1, boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
+                  <p style={{ margin: 0, color: '#888', fontSize: 13 }}>Bağlı Oyuncu</p>
+                  <p style={{ margin: 0, fontSize: 52, fontWeight: 700 }}>{playerCount}</p>
+                  <p style={{ margin: '4px 0 0', fontSize: 12, color: '#2ecc71' }}>● Lobi Açık</p>
+                </div>
+                <div style={{ background: '#fff', borderRadius: 12, padding: 20, flex: 1, boxShadow: '0 2px 8px rgba(0,0,0,0.08)', display: 'flex', flexDirection: 'column', gap: 10, justifyContent: 'center' }}>
+                  <div style={{ background: '#f5f0ff', borderRadius: 8, padding: '8px 12px', textAlign: 'center', marginBottom: 4 }}>
+                    <p style={{ margin: '0 0 2px', fontSize: 11, color: '#888' }}>Katılım Kodu</p>
+                    <p style={{ margin: 0, fontSize: 22, fontWeight: 700, letterSpacing: '0.1em', color: '#7c3aed' }}>{joinCode}</p>
+                  </div>
+                  <Btn onClick={startGame} color="#2ecc71" disabled={playerCount === 0}>▶ Oyunu Başlat</Btn>
+                  <Btn onClick={resetGame} color="#888">← Farklı Oyun</Btn>
+                </div>
+              </div>
+              <LogPanel logs={logs} />
+            </div>
+          )}
+
+          {/* QUESTION_ACTIVE */}
           {screen === S.QUESTION_ACTIVE && (
             <div>
               <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
@@ -571,6 +739,7 @@ export default function AdminPage() {
             </div>
           )}
 
+          {/* LEADERBOARD_PENDING */}
           {screen === S.LEADERBOARD_PENDING && leaderboard && (
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
@@ -591,6 +760,7 @@ export default function AdminPage() {
             </div>
           )}
 
+          {/* SCORE_REVEAL */}
           {screen === S.SCORE_REVEAL && scoreReveal && (
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
@@ -608,21 +778,14 @@ export default function AdminPage() {
             </div>
           )}
 
+          {/* FINISHED */}
           {screen === S.FINISHED && (
             <div>
               <h1 style={{ marginBottom: 20 }}>🎉 Oyun Bitti!</h1>
               <div style={{ background: '#fff', borderRadius: 12, overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', marginBottom: 20 }}>
                 <LeaderboardTable top10={gameFinished || []} showBan={false} onBan={() => {}} />
               </div>
-              <Btn onClick={() => {
-                stompRef.current?.deactivate();
-                setScreen(S.SETUP); setGameFinished(null); setConnected(false);
-                setJoinCode(''); setQuestion(null); setQuestionEnd(null);
-                setLeaderboard(null); setScoreReveal(null); setPlayerCount(0);
-                fetchGames();
-              }} color="#3498db">
-                🔄 Yeni Oyun
-              </Btn>
+              <Btn onClick={resetGame} color="#3498db">🔄 Yeni Oyun</Btn>
             </div>
           )}
 

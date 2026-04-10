@@ -1,0 +1,18 @@
+{
+  "name": "quiz-load-test",
+  "version": "1.0.0",
+  "description": "200 bot ile quiz backend yük testi",
+  "main": "test-bots.js",
+  "scripts": {
+    "test": "node test-bots.js",
+    "test:quick": "BOT_COUNT=20 node test-bots.js",
+    "test:full": "BOT_COUNT=200 node test-bots.js"
+  },
+  "dependencies": {
+    "@stomp/stompjs": "^7.0.0",
+    "ws": "^8.17.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

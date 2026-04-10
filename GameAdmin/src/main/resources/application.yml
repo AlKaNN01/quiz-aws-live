@@ -23,6 +23,7 @@ app:
   security:
     jwt-secret: ${JWT_SECRET:dev-secret-key-degistir-production-da}
     jwt-expiration-ms: 86400000
+    engine-token: ${ENGINE_TOKEN:local-engine-token-secret}
 
 logging:
   level:

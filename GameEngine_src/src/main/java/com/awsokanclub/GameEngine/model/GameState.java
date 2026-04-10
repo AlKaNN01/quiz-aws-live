@@ -18,6 +18,8 @@ public class GameState {
     private long questionStartedAt;
     private int timerSeconds;
     private Status status;
+    private boolean hostConnected;
+    private boolean lobbyOpen;
 
     public enum Status {
         WAITING,

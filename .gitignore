@@ -1,0 +1,31 @@
+# Secrets
+.env
+.env.local
+.env.production
+
+# SSL certificates
+*.crt
+*.key
+certs/
+
+# Logs & temp files
+*.log
+*.txt
+test*.log
+test*.txt
+
+# Maven build output
+**/target/
+
+# Node
+**/node_modules/
+quiz-frontend/build/
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# IDE
+.idea/
+*.iml
+.vscode/

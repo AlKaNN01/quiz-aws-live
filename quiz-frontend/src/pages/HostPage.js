@@ -105,6 +105,11 @@ export default function HostPage() {
         setConnected(true);
         client.subscribe(`/topic/game/${code}/host`, (msg) => handleMessage(JSON.parse(msg.body)));
         client.subscribe(`/topic/game/${code}`, (msg) => handleMessage(JSON.parse(msg.body)));
+        // Admin'e host bağlandığını bildir
+        client.publish({
+          destination: '/app/host.connect',
+          body: JSON.stringify({ joinCode: code, adminToken: token }),
+        });
         setScreen(STATES.WAITING);
       },
       onDisconnect: () => setConnected(false),

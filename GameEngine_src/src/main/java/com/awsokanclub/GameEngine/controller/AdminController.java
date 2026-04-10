@@ -47,6 +47,82 @@ public class AdminController {
     private final RedisTemplate<String, Object> redisTemplate;
 
     /*
+     * Admin WS bağlandığında principalName'i kaydeder.
+     * HOST_CONNECTED bildiriminin admin'e iletilebilmesi için gerekli.
+     */
+    @MessageMapping("admin.connect")
+    public void adminConnect(@Payload Map<String, String> request,
+                             SimpMessageHeaderAccessor headerAccessor) {
+        String sessionId = headerAccessor.getSessionId();
+        try {
+            validateAdmin(request.get("adminToken"));
+            String gameId = request.get("joinCode");
+            String principalName = headerAccessor.getUser() != null
+                    ? headerAccessor.getUser().getName()
+                    : headerAccessor.getSessionId();
+            gameStateService.setAdminPrincipal(gameId, principalName);
+            log.info("Admin bağlandı: gameId={} principal={}", gameId, principalName);
+        } catch (GameException e) {
+            sendError(sessionId, e);
+        }
+    }
+
+    /*
+     * Host ekranı bağlandığında çağrılır.
+     * state.hostConnected = true yapar, admin'e HOST_CONNECTED bildirir.
+     */
+    @MessageMapping("host.connect")
+    public void hostConnect(@Payload Map<String, String> request,
+                            SimpMessageHeaderAccessor headerAccessor) {
+        String sessionId = headerAccessor.getSessionId();
+        try {
+            validateAdmin(request.get("adminToken"));
+            String gameId = request.get("joinCode");
+            GameState state = gameStateService.getState(gameId);
+            if (state == null) throw GameException.gameNotFound();
+
+            state.setHostConnected(true);
+            gameStateService.saveState(state);
+
+            String adminPrincipal = gameStateService.getAdminPrincipal(gameId);
+            if (adminPrincipal != null) {
+                gameEventPublisher.sendToAdmin(adminPrincipal,
+                        Map.of("type", "HOST_CONNECTED", "gameId", gameId));
+            }
+            log.info("Host bağlandı: gameId={}", gameId);
+        } catch (GameException e) {
+            sendError(sessionId, e);
+        }
+    }
+
+    /*
+     * Admin lobi açma komutu.
+     * Host bağlı değilse hata döner.
+     * Lobi açılınca oyuncular join edebilir, host'a LOBBY_OPENED gönderilir.
+     */
+    @MessageMapping("admin.open.lobby")
+    public void openLobby(@Payload Map<String, String> request,
+                          SimpMessageHeaderAccessor headerAccessor) {
+        String sessionId = headerAccessor.getSessionId();
+        try {
+            validateAdmin(request.get("adminToken"));
+            String gameId = request.get("joinCode");
+            GameState state = gameStateService.getState(gameId);
+            if (state == null) throw GameException.gameNotFound();
+            if (!state.isHostConnected()) throw GameException.hostNotConnected();
+
+            state.setLobbyOpen(true);
+            gameStateService.saveState(state);
+
+            gameEventPublisher.broadcastToHost(gameId,
+                    Map.of("type", "LOBBY_OPENED", "gameId", gameId));
+            log.info("Lobi açıldı: gameId={}", gameId);
+        } catch (GameException e) {
+            sendError(sessionId, e);
+        }
+    }
+
+    /*
      * Oyunu başlatır.
      * Soruları GameAdmin'den çeker, Redis'e kaydeder.
      * GAME_STARTED gönderir, 5sn sonra ilk soruyu başlatır.

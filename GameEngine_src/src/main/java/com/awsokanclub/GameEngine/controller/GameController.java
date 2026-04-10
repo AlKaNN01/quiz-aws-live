@@ -73,6 +73,11 @@ public class GameController {
                 throw GameException.gameAlreadyStarted();
             }
 
+            // Lobi açık değilse (host bağlanmadı veya admin henüz açmadı) katılım reddedilir.
+            if (!state.isLobbyOpen()) {
+                throw GameException.lobbyNotOpen();
+            }
+
             GameSession session = gameSessionService.createSession(
                     request.getGameId(), request.getNickname(), ipAddress, sessionId
             );

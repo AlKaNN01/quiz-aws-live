@@ -31,7 +31,7 @@ services:
       - appnet
 
   gameadmin:
-    build: ./GameAdmin
+    image: ghcr.io/alkan01/quiz-gameadmin:latest
     restart: always
     expose:
       - "8081"
@@ -55,7 +55,7 @@ services:
       - appnet
 
   gameengine:
-    build: ./GameEngine_src
+    image: ghcr.io/alkan01/quiz-gameengine:latest
     restart: always
     expose:
       - "8080"
@@ -77,11 +77,7 @@ services:
       - appnet
 
   frontend:
-    build:
-      context: ./quiz-frontend
-      args:
-        REACT_APP_API_URL: https://${DOMAIN:-localhost}
-        REACT_APP_WS_URL: https://${DOMAIN:-localhost}/ws
+    image: ghcr.io/alkan01/quiz-frontend:latest
     restart: always
     expose:
       - "3000"

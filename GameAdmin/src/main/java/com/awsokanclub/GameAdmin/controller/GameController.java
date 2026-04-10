@@ -53,6 +53,12 @@ public class GameController {
     public ResponseEntity<GameResponse> getActiveGame() {
         return ResponseEntity.ok(gameService.getActiveGame());
     }
+    @PutMapping("/{gameId}")
+    public ResponseEntity<GameResponse> updateGameTitle(@PathVariable Long gameId,
+                                                        @RequestBody java.util.Map<String, String> body) {
+        return ResponseEntity.ok(gameService.updateGameTitle(gameId, body.get("title")));
+    }
+
     @DeleteMapping("/{gameId}")
     public ResponseEntity<Void> deleteGame(@PathVariable Long gameId) {
         gameService.deleteGame(gameId);
@@ -62,7 +68,7 @@ public class GameController {
     // GameEngine oyun bitince buraya POST atar — sonuçları kaydeder
     @PostMapping("/{gameId}/results")
     public ResponseEntity<Void> saveResults(@PathVariable String gameId,
-                                            @RequestBody List<Map<String, Object>> results) {
+                                            @RequestBody List<com.awsokanclub.GameAdmin.dto.request.GameResultRequest> results) {
         gameService.saveResults(gameId, results);
         return ResponseEntity.ok().build();
     }

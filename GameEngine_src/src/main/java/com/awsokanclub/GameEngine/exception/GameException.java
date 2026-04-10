@@ -62,4 +62,12 @@ public class GameException extends RuntimeException {
     public static GameException invalidAnswer() {
         return new GameException("INVALID_ANSWER", "Gecersiz cevap. Sadece A, B, C veya D gonderilebilir.", false);
     }
+
+    public static GameException lobbyNotOpen() {
+        return new GameException("LOBBY_NOT_OPEN", "Lobi henuz acilmadi. Host'un baglantisini ve admin onayini bekleyin.", true);
+    }
+
+    public static GameException hostNotConnected() {
+        return new GameException("HOST_NOT_CONNECTED", "Host henuz baglanmadi.", false);
+    }
 }

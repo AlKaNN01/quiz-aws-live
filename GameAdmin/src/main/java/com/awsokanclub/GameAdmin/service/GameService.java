@@ -160,6 +160,14 @@ public class GameService {
                 .build();
     }
     @Transactional
+    public GameResponse updateGameTitle(Long gameId, String title) {
+        Game game = gameRepository.findById(gameId)
+                .orElseThrow(() -> GameAdminException.notFound("Oyun bulunamadi."));
+        game.setTitle(title);
+        return toResponse(gameRepository.save(game));
+    }
+
+    @Transactional
     public void deleteGame(Long gameId) {
         log.info("Deleting game: id={}", gameId);
         if (!gameRepository.existsById(gameId)) {
