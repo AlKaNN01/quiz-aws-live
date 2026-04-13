@@ -5,6 +5,24 @@ import { Toast, useToast } from '../components/Toast';
 import { login } from '../services/api';
 import fluffyImage from '../assets/fluffy.png';
 
+// Browser UUID — tarayıcı bazlı dedup için. localStorage'da kalıcı.
+// Her tarayıcı/cihaz kendi UUID'sine sahiptir; NAT arkasındaki kullanıcıları bloklamaz.
+function getOrCreateBrowserId() {
+  let id = localStorage.getItem('quiz_browser_id');
+  if (!id) {
+    id = 'b-' + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+    localStorage.setItem('quiz_browser_id', id);
+  }
+  return id;
+}
+
+// İstemci tarafı basit profanity filtresi (backend de kontrol eder — bu sadece hızlı feedback).
+const BLOCKED = ['orospu','sik','yarrak','amk','amına','amina','ibne','pezevenk','fuck','shit','cunt','bitch','asshole','nigger','faggot'];
+function isProfane(text) {
+  const lower = text.toLowerCase().replace(/\s+/g, '');
+  return BLOCKED.some(w => lower.includes(w));
+}
+
 export default function LandingPage() {
   const navigate = useNavigate();
   const { toast, show } = useToast();
@@ -22,6 +40,8 @@ export default function LandingPage() {
     const nick = nickname.trim();
     if (!code) return show('Oyun kodunu gir.');
     if (!nick) return show('Nickname gir.');
+    if (nick.length < 2) return show('Nickname en az 2 karakter olmalı.');
+    if (isProfane(nick)) return show('Bu nickname uygun değil, lütfen başka bir isim dene.');
     navigate(`/player?joinCode=${code}&nickname=${encodeURIComponent(nick)}`);
   }
 
@@ -32,8 +52,8 @@ export default function LandingPage() {
     try {
       const data = await login(username, password);
       if (data.role !== expectedRole) return show('Yetersiz yetki.');
-      localStorage.setItem('token', data.token);
-      localStorage.setItem('role', data.role);
+      sessionStorage.setItem('token', data.token);
+      sessionStorage.setItem('role', data.role);
       navigate(path);
     } catch {
       show('Kullanici adi veya sifre hatali.');

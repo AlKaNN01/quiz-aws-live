@@ -29,21 +29,28 @@ public class GameSessionService {
     private final RedisTemplate<String, Object> redisTemplate;
 
     /*
-     * Ayni IP'den gelen 2. join isteginde yeni session yaratmak yerine
-     * mevcut session'i dondurur ve principalName'i gunceller.
-     * Bu sayede SockJS'in paralel transport denemeleri ve Android'in
-     * background/foreground gecislerinde "nickname alindi" hatasi olmaz.
+     * Browser UUID tabanlı dedup:
+     * Aynı tarayıcıdan 2. join isteği geldiğinde (SockJS retry, sekme reload vb.)
+     * mevcut session principalName güncellenerek döndürülür — yeni session açılmaz.
+     *
+     * IP tabanlı dedup'tan farkı: NAT/paylaşımlı WiFi arkasındaki farklı kullanıcılar
+     * artık birbirini bloklamaz. Her tarayıcı kendi UUID'sine sahiptir.
+     *
+     * browserId null/boş gelirse fallback: principalName (WS session ID) kullanılır.
+     * ipAddress yalnızca IP ban kontrolü için saklanır, dedup'ta kullanılmaz.
      */
-    public GameSession getOrCreateSession(String gameId, String nickname, String ipAddress, String principalName) {
-        // Bu IP'nin bu oyunda zaten aktif session'i var mi?
-        Object existingSessionId = redisTemplate.opsForHash().get("game:" + gameId + ":ip_sessions", ipAddress);
+    public GameSession getOrCreateSession(String gameId, String nickname,
+                                          String ipAddress, String principalName,
+                                          String browserId) {
+        String dedupKey = (browserId != null && !browserId.isBlank()) ? browserId : principalName;
+
+        Object existingSessionId = redisTemplate.opsForHash().get("game:" + gameId + ":browser_sessions", dedupKey);
         if (existingSessionId != null) {
             GameSession existing = getSession(existingSessionId.toString());
             if (existing != null && existing.getStatus() != GameSession.Status.BANNED) {
-                // Mevcut session'i yeni WS baglantisiyla guncelle
                 existing.setPrincipalName(principalName);
                 redisTemplate.opsForValue().set("session:" + existing.getSessionId(), existing, 2, TimeUnit.HOURS);
-                log.info("Mevcut session guncellendi (ayni IP): {} nickname: {}", existing.getSessionId(), existing.getNickname());
+                log.info("Mevcut session guncellendi (ayni browser): {} nickname: {}", existing.getSessionId(), existing.getNickname());
                 return existing;
             }
         }
@@ -74,17 +81,17 @@ public class GameSessionService {
         // userId -> sessionId index
         redisTemplate.opsForValue().set("user_to_session:" + gameId + ":" + userId, sessionId, 3, TimeUnit.HOURS);
 
-        // IP -> sessionId index (ayni IP'den tekrar join gelirse yukari yakalanir)
-        redisTemplate.opsForHash().put("game:" + gameId + ":ip_sessions", ipAddress, sessionId);
-        redisTemplate.expire("game:" + gameId + ":ip_sessions", 3, TimeUnit.HOURS);
+        // browserId/fallback -> sessionId index (aynı tarayıcıdan tekrar join gelirse yakalanır)
+        redisTemplate.opsForHash().put("game:" + gameId + ":browser_sessions", dedupKey, sessionId);
+        redisTemplate.expire("game:" + gameId + ":browser_sessions", 3, TimeUnit.HOURS);
 
-        log.info("Session olusturuldu: {} nickname: {}", sessionId, nickname);
+        log.info("Session olusturuldu: {} nickname: {} browserId: {}", sessionId, nickname, dedupKey);
         return session;
     }
 
-    // Geriye donuk uyumluluk icin — eski cagranlari kirma
+    // Geriye dönük uyumluluk — browserId olmayan çağrılar için
     public GameSession createSession(String gameId, String nickname, String ipAddress, String principalName) {
-        return getOrCreateSession(gameId, nickname, ipAddress, principalName);
+        return getOrCreateSession(gameId, nickname, ipAddress, principalName, null);
     }
 
     public GameSession getSession(String sessionId) {
@@ -123,9 +130,8 @@ public class GameSessionService {
         redisTemplate.delete("user_to_session:" + gameId + ":" + userId);
         redisTemplate.opsForSet().remove("game:" + gameId + ":players", sessionId);
         redisTemplate.opsForSet().remove("game:" + gameId + ":nicknames", nickname);
-        if (ipAddress != null) {
-            redisTemplate.opsForHash().delete("game:" + gameId + ":ip_sessions", ipAddress);
-        }
+        // Not: browser_sessions hash'inden tek entry'yi silmek için browserId gerekir.
+        // Ban/kick senaryosunda browserId bilinmeyebilir — hash TTL (3 saat) ile expire olur.
     }
 
     public List<String> getPlayerIds(String gameId) {

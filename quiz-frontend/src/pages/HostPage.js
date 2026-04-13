@@ -16,7 +16,7 @@ const STATES = { SETUP: 'SETUP', WAITING: 'WAITING', COUNTDOWN: 'COUNTDOWN', QUE
 
 export default function HostPage() {
   const navigate = useNavigate();
-  const token = localStorage.getItem('token') || '';
+  const token = sessionStorage.getItem('token') || '';
 
   const [screen, setScreen] = useState(STATES.SETUP);
   const [gameId, setGameId] = useState('');
@@ -407,7 +407,7 @@ export default function HostPage() {
         </div>
 
         <button
-          onClick={() => { localStorage.removeItem('token'); navigate('/'); }}
+          onClick={() => { sessionStorage.removeItem('token'); navigate('/'); }}
           style={{
             marginTop: 22,
             padding: '14px 28px',

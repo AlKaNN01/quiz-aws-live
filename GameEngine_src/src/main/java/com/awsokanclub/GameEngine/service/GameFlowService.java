@@ -63,14 +63,12 @@ public class GameFlowService {
 
         String questionId = question.get("id").toString();
 
-        // Önceki cevap key'lerini temizle
+        // Soru başında cevap key'lerini temizle.
+        // Pattern delete kullanılır — önceki N+1 session-loop yerine tek Redis SCAN.
+        // Bu sayede aynı questionId farklı oyunda (veya restart'ta) stale cevap kalınmaz.
         redisTemplate.delete("answer:dist:" + gameId + ":" + questionId);
         redisTemplate.delete("answered:" + gameId + ":" + questionId);
-        List<String> sessionIds = gameSessionService.getPlayerIds(gameId);
-        for (String sid : sessionIds) {
-            GameSession s = gameSessionService.getSession(sid);
-            if (s != null) redisTemplate.delete("answer:" + gameId + ":" + questionId + ":" + s.getUserId());
-        }
+        deleteByPattern("answer:" + gameId + ":" + questionId + ":*");
 
         state.setCurrentQuestionId(questionId);
         state.setCurrentQuestionIndex(questionIndex);
@@ -163,6 +161,14 @@ public class GameFlowService {
 
         long approvalTimeout = leaderboardApprovalTimeoutMs;
         long autoPublishAt = System.currentTimeMillis() + approvalTimeout;
+
+        // autoPublishAt'ı Redis'te sakla — admin reconnect'te HYDRATE ile geri gönderilebilsin
+        GameState leaderboardState = gameStateService.getState(gameId);
+        if (leaderboardState != null) {
+            leaderboardState.setAutoPublishAt(autoPublishAt);
+            gameStateService.saveState(leaderboardState);
+        }
+
         List<Map<String, Object>> top10 = buildTop10(gameId);
 
         LeaderboardPending pending = LeaderboardPending.builder()
@@ -307,13 +313,15 @@ public class GameFlowService {
                 "game:" + gameId + ":nicknames",
                 "game:" + gameId + ":questions",
                 "game:" + gameId + ":adminPrincipal",
+                "game:" + gameId + ":browser_sessions",
                 "leaderboard:" + gameId
             ));
 
-            // Pattern tabanlı key'ler: cevaplar, lock'lar
+            // Pattern tabanlı key'ler: cevaplar, streak'ler, lock'lar
             deleteByPattern("answer:" + gameId + ":*");
             deleteByPattern("answer:dist:" + gameId + ":*");
             deleteByPattern("answered:" + gameId + ":*");
+            deleteByPattern("streak:" + gameId + ":*");
             deleteByPattern("lock:scorereveal:" + gameId + ":*");
 
             log.info("Redis temizlendi: gameId={}", gameId);

@@ -35,19 +35,52 @@ public class AnswerService {
         return Boolean.TRUE.equals(isFirst);
     }
 
-    // Puan hesaplamasi.
-    // reactionTimeMs: Frontend'in olctugu sure — butona basildigı an ile sorunun
-    // basladigi an arasindaki fark. Sunucu saati kullanilmaz, ping adaletsizligi onlenir.
-    // 150ms alti: fizyolojik olarak imkansiz, hile sayilir → 0 puan.
-    // Sure asiminda: 0 puan.
-    // Ne kadar hizli basarsan o kadar yuksek puan, max 1000.
-    public int calculateScore(long reactionTimeMs, int timerSeconds, boolean isCorrect) {
+    /*
+     * Puan hesaplama — Kahoot formülü.
+     *
+     * Taban puan: min 500, max 1000 (doğru cevapta).
+     * Formül: base = (1 - ratio/2) × 1000  [Kahoot'la birebir aynı: 500 + 500×(1-ratio)]
+     *
+     * Streak bonus (ardışık doğru cevaplar):
+     *   - 2 ardışık → +100 puan
+     *   - 3+ ardışık → +200 puan
+     *   Toplam skor 1200 ile sınırlandırılır.
+     *
+     * Kural dışı durumlar:
+     *   - reactionTimeMs < 150 → fizyolojik olarak imkânsız, bot şüphesi → 0
+     *   - reactionTimeMs ≥ maxMs → süre aşımı → 0
+     *   - yanlış cevap → 0, streak sıfırlanır
+     */
+    public int calculateScore(long reactionTimeMs, int timerSeconds, boolean isCorrect, int streak) {
         if (!isCorrect) return 0;
         if (reactionTimeMs < 150) return 0;
         long maxMs = timerSeconds * 1000L;
         if (reactionTimeMs >= maxMs) return 0;
         double ratio = (double) reactionTimeMs / maxMs;
-        return (int) Math.round((1.0 - ratio / 2.0) * 1000.0);
+        int base = (int) Math.round((1.0 - ratio / 2.0) * 1000.0);
+        int bonus = streak >= 3 ? 200 : streak == 2 ? 100 : 0;
+        return Math.min(base + bonus, 1200);
+    }
+
+    // Geriye dönük uyumluluk (streak yok → bonus 0)
+    public int calculateScore(long reactionTimeMs, int timerSeconds, boolean isCorrect) {
+        return calculateScore(reactionTimeMs, timerSeconds, isCorrect, 0);
+    }
+
+    /*
+     * Streak takibi — doğru cevapta artırır, yanlışta sıfırlar.
+     * Döndürülen değer: güncel streak (doğruysa ≥ 1, yanlışsa 0).
+     * Redis key: streak:{gameId}:{userId}, oyun bitiminde cleanupGameRedis ile silinir.
+     */
+    public int recordAndGetStreak(String gameId, String userId, boolean isCorrect) {
+        String key = "streak:" + gameId + ":" + userId;
+        if (!isCorrect) {
+            redisTemplate.delete(key);
+            return 0;
+        }
+        Long streak = redisTemplate.opsForValue().increment(key);
+        redisTemplate.expire(key, 24, TimeUnit.HOURS);
+        return streak != null ? streak.intValue() : 1;
     }
 
     // Host ekraninin "X/300 cevapladi" sayaci icin cevaplayan oyuncuyu kaydeder.

@@ -17,4 +17,6 @@ public class AnswerReceived {
     private String gameId;
     private String questionId;
     private String yourAnswer;
+    // Streak: kaç ardışık doğru cevap verildi. 2+ için frontend streak animasyonu gösterir.
+    private int streak;
 }

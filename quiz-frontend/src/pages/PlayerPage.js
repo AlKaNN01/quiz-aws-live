@@ -45,6 +45,7 @@ export default function PlayerPage() {
   const [gameFinished, setGameFinished] = useState(null);
   const [banReason, setBanReason] = useState('');
   const [error, setError] = useState(null);
+  const [streak, setStreak] = useState(0);
 
   const stompRef = useRef(null);
   const sessionRef = useRef(null);
@@ -53,6 +54,7 @@ export default function PlayerPage() {
   const nextQRef = useRef(null);
   const countdownRef = useRef(null);
   const retryJoinRef = useRef(null);
+  const answerSubmittedRef = useRef(false);
 
   useEffect(() => {
     sessionRef.current = session;
@@ -93,6 +95,7 @@ export default function PlayerPage() {
       case 'QUESTION_START':
         clearInterval(timerRef.current);
         clearInterval(countdownRef.current);
+        setStreak(0);
         setQuestion({
           questionId: msg.questionId,
           questionIndex: msg.questionIndex,
@@ -103,6 +106,7 @@ export default function PlayerPage() {
           startedAt: msg.startedAt,
         });
         setSelectedAnswer(null);
+        answerSubmittedRef.current = false;
         setTimeLeft(msg.timerSeconds);
         timerRef.current = setInterval(() => {
           const elapsed = Math.floor((Date.now() - msg.startedAt) / 1000);
@@ -114,6 +118,7 @@ export default function PlayerPage() {
         break;
 
       case 'ANSWER_RECEIVED':
+        if (msg.streak >= 2) setStreak(msg.streak);
         setScreen(STATES.ANSWER_RECEIVED);
         break;
 
@@ -166,7 +171,7 @@ export default function PlayerPage() {
         break;
 
       case 'BANNED':
-        if (msg.userId && sessionRef.current?.userId && msg.userId !== sessionRef.current.userId) break;
+        // BANNED artık yalnızca o oyuncuya sendToUser ile gönderiliyor — userId filtresi gerekmiyor
         clearInterval(timerRef.current);
         clearInterval(nextQRef.current);
         clearInterval(countdownRef.current);
@@ -235,9 +240,11 @@ export default function PlayerPage() {
         }
 
         const sendJoinRequest = () => {
+          // browserId: localStorage'daki sabit UUID — IP yerine dedup için kullanılır
+          const browserId = localStorage.getItem('quiz_browser_id') || '';
           client.publish({
             destination: '/app/game.join',
-            body: JSON.stringify({ gameId, joinCode: gameId, nickname }),
+            body: JSON.stringify({ gameId, joinCode: gameId, nickname, browserId }),
           });
         };
 
@@ -296,7 +303,9 @@ export default function PlayerPage() {
 
   const submitAnswer = (answer) => {
     const sess = sessionRef.current;
-    if (!question || selectedAnswer || !sess) return;
+    // answerSubmittedRef: senkron guard (state async olduğu için iki hızlı tık geçebilir)
+    if (!question || answerSubmittedRef.current || !sess) return;
+    answerSubmittedRef.current = true;
 
     const reactionTimeMs = Date.now() - question.startedAt;
     setSelectedAnswer(answer);
@@ -449,6 +458,21 @@ export default function PlayerPage() {
             <StatusCloud tone="success" />
             <Eyebrow>Submission locked</Eyebrow>
             <HeroTitle>Cevabın alındı</HeroTitle>
+            {streak >= 2 && (
+              <div style={{
+                marginTop: 12,
+                background: 'linear-gradient(135deg, #f7971e 0%, #ffd200 100%)',
+                borderRadius: 20,
+                padding: '8px 20px',
+                fontWeight: 800,
+                fontSize: 15,
+                color: '#fff',
+                letterSpacing: 1,
+                textShadow: '0 1px 3px rgba(0,0,0,0.25)',
+              }}>
+                {streak >= 3 ? '🔥 ' + streak + ' STREAK! +200 bonus' : '⚡ 2 STREAK! +100 bonus'}
+              </div>
+            )}
             <BodyText narrow>Diger oyuncularin cevaplari bekleniyor.</BodyText>
           </CenterStack>
         </FocusCard>

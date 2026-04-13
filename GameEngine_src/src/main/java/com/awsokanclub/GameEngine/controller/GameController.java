@@ -37,6 +37,7 @@ public class GameController {
     private final LeaderboardService leaderboardService;
     private final GameEventPublisher gameEventPublisher;
     private final ModerationService moderationService;
+    private final ProfanityFilter profanityFilter;
     private final GameAdminClient gameAdminClient;
     private final GameFlowService gameFlowService;
 
@@ -47,6 +48,11 @@ public class GameController {
 
         try {
             if (moderationService.isIpBanned(ipAddress)) throw GameException.ipBanned();
+
+            // Nickname profanity kontrolü
+            if (!profanityFilter.isClean(request.getNickname())) {
+                throw GameException.nicknameProfane();
+            }
 
             boolean valid = gameAdminClient.validateJoinCode(request.getGameId(), request.getJoinCode());
             if (!valid) throw GameException.invalidJoinCode();
@@ -78,8 +84,9 @@ public class GameController {
                 throw GameException.lobbyNotOpen();
             }
 
-            GameSession session = gameSessionService.createSession(
-                    request.getGameId(), request.getNickname(), ipAddress, sessionId
+            GameSession session = gameSessionService.getOrCreateSession(
+                    request.getGameId(), request.getNickname(),
+                    ipAddress, sessionId, request.getBrowserId()
             );
             if (session == null) throw GameException.nicknameTaken();
 
@@ -155,8 +162,13 @@ public class GameController {
             long clientMs = request.getReactionTimeMs();
             long reactionTimeMs = (clientMs < serverSideMs - 500) ? serverSideMs : clientMs;
 
+            // Streak güncelle — doğruysa +1, yanlışsa sıfırla. Bonus hesapta kullanılır.
+            int streak = answerService.recordAndGetStreak(
+                    request.getGameId(), session.getUserId(), isCorrect
+            );
+
             int score = answerService.calculateScore(
-                    reactionTimeMs, state.getTimerSeconds(), isCorrect
+                    reactionTimeMs, state.getTimerSeconds(), isCorrect, streak
             );
 
             if (score > 0) {
@@ -171,6 +183,7 @@ public class GameController {
                     .gameId(request.getGameId())
                     .questionId(request.getQuestionId())
                     .yourAnswer(request.getAnswer())
+                    .streak(streak)
                     .build());
 
             int answeredCount = gameSessionService.getAnsweredCount(

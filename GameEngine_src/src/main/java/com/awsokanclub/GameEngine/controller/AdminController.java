@@ -29,6 +29,7 @@ import org.springframework.stereotype.Controller;
 
 import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Controller
@@ -48,7 +49,8 @@ public class AdminController {
 
     /*
      * Admin WS bağlandığında principalName'i kaydeder.
-     * HOST_CONNECTED bildiriminin admin'e iletilebilmesi için gerekli.
+     * Eğer oyun devam ediyorsa mevcut state'i ADMIN_HYDRATE ile geri gönderir
+     * — admin sayfayı yenilese bile UI restore edilir.
      */
     @MessageMapping("admin.connect")
     public void adminConnect(@Payload Map<String, String> request,
@@ -62,9 +64,93 @@ public class AdminController {
                     : headerAccessor.getSessionId();
             gameStateService.setAdminPrincipal(gameId, principalName);
             log.info("Admin bağlandı: gameId={} principal={}", gameId, principalName);
+
+            // ── Hydration: devam eden oyunda reconnect ──
+            sendHydration(gameId, principalName);
+
         } catch (GameException e) {
             sendError(sessionId, e);
         }
+    }
+
+    /*
+     * Mevcut oyun durumunu admin'e gönderir.
+     * WAITING/null → hydration yok (lobi aşaması — zaten sıfırdan kurulur).
+     * Diğer tüm state'lerde admin UI doğru ekrana konumlanır.
+     */
+    private void sendHydration(String gameId, String principalName) {
+        GameState state = gameStateService.getState(gameId);
+        if (state == null || state.getStatus() == GameState.Status.WAITING) return;
+
+        Map<String, Object> hydrate = new LinkedHashMap<>();
+        hydrate.put("type", "ADMIN_HYDRATE");
+        hydrate.put("gameId", gameId);
+        hydrate.put("gameStatus", state.getStatus().name());
+        hydrate.put("questionIndex", state.getCurrentQuestionIndex());
+        hydrate.put("totalQuestions", state.getTotalQuestions());
+        hydrate.put("questionId", state.getCurrentQuestionId());
+        hydrate.put("playerCount", gameSessionService.getPlayerCount(gameId));
+
+        if (state.getStatus() == GameState.Status.QUESTION_ACTIVE) {
+            // Kalan süreyi ve cevap sayısını ekle
+            long elapsed = System.currentTimeMillis() - state.getQuestionStartedAt();
+            int remaining = (int) Math.max(0, state.getTimerSeconds() - elapsed / 1000);
+            hydrate.put("timerRemaining", remaining);
+            hydrate.put("answeredCount", gameSessionService.getAnsweredCount(gameId, state.getCurrentQuestionId()));
+
+            // Soru metnini Redis'ten çek
+            Map<String, Object> question = gameStateService.getQuestion(gameId, state.getCurrentQuestionIndex());
+            if (question != null) {
+                hydrate.put("questionText", question.get("text"));
+                hydrate.put("timerSeconds", question.get("timerSeconds"));
+                // Seçenekler
+                Map<String, String> opts = new LinkedHashMap<>();
+                opts.put("A", (String) question.get("optionA"));
+                opts.put("B", (String) question.get("optionB"));
+                opts.put("C", (String) question.get("optionC"));
+                opts.put("D", (String) question.get("optionD"));
+                hydrate.put("options", opts);
+            }
+        }
+
+        if (state.getStatus() == GameState.Status.LEADERBOARD_REVIEW) {
+            hydrate.put("autoPublishAt", state.getAutoPublishAt());
+            hydrate.put("top10", buildHydrateTop10(gameId));
+        }
+
+        if (state.getStatus() == GameState.Status.SCORE_REVEALING
+                || state.getStatus() == GameState.Status.COUNTDOWN) {
+            hydrate.put("top10", buildHydrateTop10(gameId));
+        }
+
+        gameEventPublisher.sendToAdmin(principalName, hydrate);
+        log.info("Hydration gönderildi: gameId={} status={}", gameId, state.getStatus());
+    }
+
+    private List<Map<String, Object>> buildHydrateTop10(String gameId) {
+        List<String> sessionIds = gameSessionService.getPlayerIds(gameId);
+        List<String> redisKeys = sessionIds.stream().map(id -> "session:" + id).toList();
+        List<Object> raw = redisKeys.isEmpty() ? List.of() : redisTemplate.opsForValue().multiGet(redisKeys);
+        Map<String, String> nicknameMap = new HashMap<>();
+        if (raw != null) {
+            for (Object o : raw) {
+                if (o instanceof com.awsokanclub.GameEngine.model.GameSession s) {
+                    nicknameMap.put(s.getUserId(), s.getNickname());
+                }
+            }
+        }
+        List<Object[]> rawScores = leaderboardService.getTop10(gameId);
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (int i = 0; i < rawScores.size(); i++) {
+            String uid = rawScores.get(i)[0].toString();
+            Map<String, Object> entry = new HashMap<>();
+            entry.put("rank", i + 1);
+            entry.put("userId", uid);
+            entry.put("nickname", nicknameMap.getOrDefault(uid, uid));
+            entry.put("score", rawScores.get(i)[1]);
+            result.add(entry);
+        }
+        return result;
     }
 
     /*
@@ -126,17 +212,30 @@ public class AdminController {
      * Oyunu başlatır.
      * Soruları GameAdmin'den çeker, Redis'e kaydeder.
      * GAME_STARTED gönderir, 5sn sonra ilk soruyu başlatır.
+     *
+     * Redis Lock: admin "Başlat" butonuna çift tıklarsa veya network retry yaparsa
+     * aynı oyun iki kez başlamaz. Lock 15sn TTL ile alınır; normal akışta 5-6sn içinde biter.
      */
     @MessageMapping("admin.start")
     public void startGame(@Payload Map<String, String> request,
                           SimpMessageHeaderAccessor headerAccessor) {
         String sessionId = headerAccessor.getSessionId();
+        String gameId = request.get("joinCode");
+        String lockKey = "lock:game:" + gameId + ":starting";
+        boolean lockAcquired = false;
         try {
             validateAdmin(request.get("adminToken"));
-            String gameId = request.get("joinCode");
+
+            // Atomik lock — çift-start imkânsız hâle gelir
+            Boolean locked = redisTemplate.opsForValue().setIfAbsent(lockKey, "1", 15, TimeUnit.SECONDS);
+            if (!Boolean.TRUE.equals(locked)) throw GameException.gameAlreadyActive();
+            lockAcquired = true;
 
             GameState state = gameStateService.getState(gameId);
             if (state == null) throw GameException.gameNotFound();
+
+            // WAITING dışında bir state'te ise oyun zaten başlamış
+            if (state.getStatus() != GameState.Status.WAITING) throw GameException.gameAlreadyActive();
 
             String principalName = headerAccessor.getUser() != null
                     ? headerAccessor.getUser().getName()
@@ -174,6 +273,12 @@ public class AdminController {
 
         } catch (GameException e) {
             sendError(sessionId, e);
+        } finally {
+            // Lock'u serbest bırak — başlatma tamamlandı ya da hata aldık
+            // (Oyun timer'ı artık GameFlowService'te; bu lock sadece başlatma kritik bölgesi için)
+            if (lockAcquired) {
+                redisTemplate.delete(lockKey);
+            }
         }
     }
 

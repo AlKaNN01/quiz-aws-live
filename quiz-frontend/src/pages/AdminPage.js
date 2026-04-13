@@ -108,7 +108,7 @@ function LogPanel({ logs }) {
 
 export default function AdminPage() {
   const navigate = useNavigate();
-  const token = localStorage.getItem('token') || '';
+  const token = sessionStorage.getItem('token') || '';
 
   // ── Quiz yönetimi ───────────────────────────────────────────
   const [games, setGames] = useState([]);
@@ -141,6 +141,8 @@ export default function AdminPage() {
   const [timeLeft, setTimeLeft] = useState(0);
   const [logs, setLogs] = useState([]);
   const [banConfirm, setBanConfirm] = useState(null);
+  // WS komutuna cevap gelene kadar butonları disable eder (çift tık / hızlı tık koruması)
+  const [wsActionPending, setWsActionPending] = useState(false);
 
   const stompRef = useRef(null);
   const autoRef  = useRef(null);
@@ -249,6 +251,7 @@ export default function AdminPage() {
 
   const handleMsg = useCallback((msg) => {
     addLog(`← ${msg.type}`);
+    setWsActionPending(false); // server yanıt verdi — buton kilidi aç
     switch (msg.type) {
       case 'HOST_CONNECTED':
         setScreen(S.LOBBY_CLOSED);
@@ -264,7 +267,7 @@ export default function AdminPage() {
         break;
       case 'QUESTION_START':
         setQuestion({ id: msg.questionId, index: msg.questionIndex, total: msg.totalQuestions, text: msg.questionText, options: msg.options, timer: msg.timerSeconds });
-        setTotalPlayers(msg.totalPlayers || 0); setAnswerCount(0); setQuestionEnd(null);
+        setAnswerCount(0); setQuestionEnd(null);
         setScreen(S.QUESTION_ACTIVE);
         break;
       case 'HOST_ANSWER_COUNT':
@@ -299,6 +302,62 @@ export default function AdminPage() {
         clearInterval(autoRef.current); clearInterval(nextQRef.current);
         setGameFinished(msg.top5); setScreen(S.FINISHED);
         break;
+
+      /*
+       * Admin bağlandığında (veya yeniden bağlandığında) backend mevcut oyun
+       * state'ini ADMIN_HYDRATE ile gönderir — admin sayfayı yenilese bile
+       * doğru ekrana konumlanır.
+       */
+      case 'ADMIN_HYDRATE': {
+        addLog(`← HYDRATE: status=${msg.gameStatus}`);
+        setPlayerCount(msg.playerCount || 0);
+        switch (msg.gameStatus) {
+          case 'QUESTION_ACTIVE':
+            setQuestion({
+              id: msg.questionId,
+              index: msg.questionIndex,
+              total: msg.totalQuestions,
+              text: msg.questionText || '',
+              options: msg.options || {},
+              timer: msg.timerSeconds || 20,
+            });
+            setAnswerCount(msg.answeredCount || 0);
+            setTotalPlayers(msg.playerCount || 0);
+            setQuestionEnd(null);
+            setScreen(S.QUESTION_ACTIVE);
+            break;
+          case 'QUESTION_END':
+          case 'ANSWER_REVEAL':
+            setScreen(S.QUESTION_ACTIVE);
+            break;
+          case 'LEADERBOARD_REVIEW':
+            setLeaderboard({
+              questionId: msg.questionId,
+              top10: msg.top10 || [],
+              autoPublishAt: msg.autoPublishAt || (Date.now() + 30000),
+            });
+            clearInterval(autoRef.current);
+            autoRef.current = setInterval(() => {
+              const left = Math.max(0, Math.ceil(((msg.autoPublishAt || Date.now()) - Date.now()) / 1000));
+              setAutoCountdown(left);
+              if (left === 0) clearInterval(autoRef.current);
+            }, 200);
+            setScreen(S.LEADERBOARD_PENDING);
+            break;
+          case 'SCORE_REVEALING':
+          case 'COUNTDOWN':
+            setScoreReveal({ top10: msg.top10 || [], nextQuestionAt: 0 });
+            setScreen(S.SCORE_REVEAL);
+            break;
+          case 'FINISHED':
+            setScreen(S.FINISHED);
+            break;
+          default:
+            break;
+        }
+        break;
+      }
+
       default: break;
     }
   }, []);
@@ -316,12 +375,10 @@ export default function AdminPage() {
           addLog(`← /user/queue/admin: ${m.body.slice(0, 120)}`);
           handleMsg(JSON.parse(m.body));
         });
+        // /host kanalı tüm oyun mesajlarını zaten alıyor (GAME_STARTED, QUESTION_START vb.)
+        // /game kanalına abone olmak aynı mesajları iki kez işletirdi — kaldırıldı.
         client.subscribe(`/topic/game/${code}/host`, m => {
           addLog(`← /host: ${m.body.slice(0, 120)}`);
-          handleMsg(JSON.parse(m.body));
-        });
-        client.subscribe(`/topic/game/${code}`, m => {
-          addLog(`← /game: ${m.body.slice(0, 120)}`);
           handleMsg(JSON.parse(m.body));
         });
         // Admin principalName'ini kaydet (HOST_CONNECTED için gerekli)
@@ -353,29 +410,30 @@ export default function AdminPage() {
     }
   };
 
-  const wsSend = (dest, body) => {
+  const wsSend = (dest, body, withPending = false) => {
     const c = stompRef.current;
     if (!c) { addLog(`✖ wsSend: stompRef null [${dest}]`); return; }
     if (!c.connected) { addLog(`✖ wsSend: bağlı değil [${dest}]`); return; }
     const payload = JSON.stringify({ ...body, adminToken: token });
     addLog(`→ /app/${dest} | ${payload.slice(0, 100)}`);
+    if (withPending) setWsActionPending(true);
     c.publish({ destination: `/app/${dest}`, body: payload });
   };
 
-  const openLobby         = () => wsSend('admin.open.lobby', { joinCode });
-  const startGame         = () => wsSend('admin.start', { joinCode });
-  const endQuestion       = () => wsSend('admin.end.question', { joinCode });
+  const openLobby         = () => wsSend('admin.open.lobby', { joinCode }, true);
+  const startGame         = () => wsSend('admin.start', { joinCode }, true);
+  const endQuestion       = () => wsSend('admin.end.question', { joinCode }, true);
   const approveLeaderboard = () => {
     if (!leaderboard) return;
-    wsSend('admin.leaderboard.approve', { gameId: joinCode, questionId: leaderboard.questionId });
+    wsSend('admin.leaderboard.approve', { gameId: joinCode, questionId: leaderboard.questionId }, true);
     clearInterval(autoRef.current);
   };
-  const finishGame = () => wsSend('admin.finish', { joinCode });
+  const finishGame = () => wsSend('admin.finish', { joinCode }, true);
 
   const requestBan = (player) => setBanConfirm(player);
   const confirmBan = () => {
     if (!banConfirm) return;
-    wsSend('admin.ban', { gameId: joinCode, sessionId: banConfirm.sessionId || '', userId: banConfirm.userId || '', reason: 'Admin ban' });
+    wsSend('admin.ban', { gameId: joinCode, userId: banConfirm.userId || '', reason: 'Admin ban' });
     addLog(`Ban: ${banConfirm.nickname || banConfirm.userId}`);
     if (leaderboard) setLeaderboard(lb => ({ ...lb, top10: lb.top10.filter(p => p.userId !== banConfirm.userId) }));
     if (scoreReveal) setScoreReveal(sr => ({ ...sr, top10: sr.top10.filter(p => p.userId !== banConfirm.userId) }));
@@ -441,7 +499,7 @@ export default function AdminPage() {
       <div style={{ width: 420, background: '#fff', borderRight: '1px solid #e0e0e0', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <div style={{ padding: '14px 16px', background: '#1a1a2e', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontWeight: 700, fontSize: 15 }}>📚 Quiz Kütüphanesi</span>
-          <button onClick={() => { localStorage.removeItem('token'); navigate('/'); }}
+          <button onClick={() => { sessionStorage.removeItem('token'); navigate('/'); }}
             style={{ background: 'transparent', border: '1px solid #555', color: '#aaa', padding: '4px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}>Çıkış</button>
         </div>
 
@@ -673,7 +731,7 @@ export default function AdminPage() {
                   <p style={{ margin: '0 0 4px', fontSize: 13, color: '#888' }}>Oyun Kodu</p>
                   <p style={{ margin: 0, fontSize: 34, fontWeight: 700, letterSpacing: '0.15em', color: '#7c3aed' }}>{joinCode}</p>
                 </div>
-                <Btn onClick={openLobby} color="#2ecc71">🚪 Lobiyi Aç</Btn>
+                <Btn onClick={openLobby} color="#2ecc71" disabled={wsActionPending}>🚪 Lobiyi Aç</Btn>
               </div>
               <LogPanel logs={logs} />
             </div>
@@ -693,7 +751,7 @@ export default function AdminPage() {
                     <p style={{ margin: '0 0 2px', fontSize: 11, color: '#888' }}>Katılım Kodu</p>
                     <p style={{ margin: 0, fontSize: 22, fontWeight: 700, letterSpacing: '0.1em', color: '#7c3aed' }}>{joinCode}</p>
                   </div>
-                  <Btn onClick={startGame} color="#2ecc71" disabled={playerCount === 0}>▶ Oyunu Başlat</Btn>
+                  <Btn onClick={startGame} color="#2ecc71" disabled={playerCount === 0 || wsActionPending}>▶ Oyunu Başlat</Btn>
                   <Btn onClick={resetGame} color="#888">← Farklı Oyun</Btn>
                 </div>
               </div>
@@ -705,7 +763,7 @@ export default function AdminPage() {
           {screen === S.QUESTION_ACTIVE && (
             <div>
               <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
-                <Btn onClick={endQuestion} color="#f39c12">⏭ Soruyu Bitir</Btn>
+                <Btn onClick={endQuestion} color="#f39c12" disabled={wsActionPending}>⏭ Soruyu Bitir</Btn>
                 <Btn onClick={finishGame} color="#e74c3c">⏹ Oyunu Bitir</Btn>
               </div>
               {question ? (
@@ -753,7 +811,7 @@ export default function AdminPage() {
                 <LeaderboardTable top10={leaderboard.top10} showBan={true} onBan={requestBan} />
               </div>
               <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
-                <Btn onClick={approveLeaderboard} color="#2ecc71">✓ Onayla ve Devam Et</Btn>
+                <Btn onClick={approveLeaderboard} color="#2ecc71" disabled={wsActionPending}>✓ Onayla ve Devam Et</Btn>
                 <Btn onClick={finishGame} color="#e74c3c">⏹ Oyunu Bitir</Btn>
               </div>
               <LogPanel logs={logs} />

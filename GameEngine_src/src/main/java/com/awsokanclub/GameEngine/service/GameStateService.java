@@ -46,6 +46,10 @@ public class GameStateService {
     public void updateStatus(String gameId, GameState.Status status) {
         GameState state = getState(gameId);
         if (state != null) {
+            if (!state.isValidTransition(status)) {
+                log.warn("FSM: gecersiz gecis {} → {} (gameId={})", state.getStatus(), status, gameId);
+                // Bloklamıyoruz — sadece uyarı. Yanlış sıra gelen timer/event çökmemeli.
+            }
             state.setStatus(status);
             saveState(state);
         }
