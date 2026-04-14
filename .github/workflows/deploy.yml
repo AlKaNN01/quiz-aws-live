@@ -55,6 +55,7 @@ jobs:
           DB_PASSWORD: postgres
           DB_URL: jdbc:postgresql://localhost:5432/gameadmin
           DB_USER: postgres
+          ALLOWED_ORIGINS: http://localhost:3000,https://quiz.awsccokan.com
 
       - name: Run GameEngine tests
         run: cd GameEngine_src && mvn clean test -q

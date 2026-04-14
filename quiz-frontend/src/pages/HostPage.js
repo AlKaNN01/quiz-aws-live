@@ -144,8 +144,9 @@ export default function HostPage() {
   const connect = () => {
     const code = gameId.trim().toUpperCase();
     if (!code) return;
+    const sockJsUrl = WS_URL.replace(/^wss?:/, (m) => m === 'ws:' ? 'http:' : 'https:');
     const client = new Client({
-      webSocketFactory: () => new SockJS(WS_URL),
+      webSocketFactory: () => new SockJS(sockJsUrl),
       reconnectDelay: 5000,
       onConnect: () => {
         setConnected(true);

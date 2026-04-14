@@ -16,8 +16,9 @@ export function useWebSocket({ gameId, onMessage, subscriptions = [] }) {
   useEffect(() => {
     if (!gameId) return;
 
+    const sockJsUrl = WS_URL.replace(/^wss?:/, (m) => m === 'ws:' ? 'http:' : 'https:');
     const client = new Client({
-      webSocketFactory: () => new SockJS(WS_URL),
+      webSocketFactory: () => new SockJS(sockJsUrl),
       reconnectDelay: 3000,
       onConnect: () => {
         console.log('WebSocket bağlandı');

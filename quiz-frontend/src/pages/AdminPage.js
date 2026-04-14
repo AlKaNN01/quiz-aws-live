@@ -551,8 +551,9 @@ export default function AdminPage() {
   const connectWSWithCode = (code) => {
     if (!code) return;
     addLog(`WS bağlanıyor: ${WS_URL} | kod: ${code}`);
+    const sockJsUrl = WS_URL.replace(/^wss?:/, (m) => m === 'ws:' ? 'http:' : 'https:');
     const client = new Client({
-      webSocketFactory: () => new SockJS(WS_URL),
+      webSocketFactory: () => new SockJS(sockJsUrl),
       reconnectDelay: 5000,
       onConnect: (frame) => {
         setConnected(true);

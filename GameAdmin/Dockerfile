@@ -6,6 +6,7 @@ COPY src src
 RUN mvn package -DskipTests -q
 
 FROM eclipse-temurin:21-jre-alpine
+RUN apk add --no-cache curl
 WORKDIR /app
 COPY --from=build /build/target/GameAdmin-0.0.1-SNAPSHOT.jar app.jar
 EXPOSE 8080

@@ -144,7 +144,7 @@ services:
       - quiz-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost/"]
+      test: ["CMD", "wget", "-q", "--spider", "--no-check-certificate", "https://localhost/"]
       interval: 30s
       timeout: 10s
       retries: 3

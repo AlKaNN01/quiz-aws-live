@@ -232,8 +232,9 @@ export default function PlayerPage() {
       return;
     }
 
+    const sockJsUrl = WS_URL.replace(/^wss?:/, (m) => m === 'ws:' ? 'http:' : 'https:');
     const client = new Client({
-      webSocketFactory: () => new SockJS(WS_URL),
+      webSocketFactory: () => new SockJS(sockJsUrl),
       // reconnectDelay 0 olursa player kopunca hic yeniden baglanmaz.
       // 3000ms ile max 5 deneme yapilir, sonra kullanici anasayfaya yonlendirilir.
       reconnectDelay: 3000,
