@@ -104,7 +104,7 @@ jobs:
           ENGINE_TOKEN: ${{ secrets.ENGINE_TOKEN }}
           DOMAIN: ${{ secrets.DOMAIN }}
         run: |
-          printf "DB_PASSWORD=%s\nREDIS_PASSWORD=%s\nJWT_SECRET=%s\nENGINE_TOKEN=%s\nENVIRONMENT=production\nLOG_LEVEL=INFO\nREACT_APP_API_URL=https://%s\nREACT_APP_WS_URL=wss://%s\nALLOWED_ORIGINS=https://%s\nGAME_ADMIN_URL=http://game-admin:8080\n" \
+          printf "DB_PASSWORD=%s\nREDIS_PASSWORD=%s\nJWT_SECRET=%s\nENGINE_TOKEN=%s\nENVIRONMENT=production\nLOG_LEVEL=INFO\nREACT_APP_API_URL=https://%s\nREACT_APP_WS_URL=wss://%s/ws\nALLOWED_ORIGINS=https://%s\nGAME_ADMIN_URL=http://game-admin:8080\n" \
             "$DB_PASSWORD" "$REDIS_PASSWORD" "$JWT_SECRET" "$ENGINE_TOKEN" \
             "$DOMAIN" "$DOMAIN" "$DOMAIN" > /tmp/prod.env
           scp -i ~/.ssh/id_rsa /tmp/prod.env ubuntu@${{ secrets.EC2_IP }}:/home/ubuntu/app/.env
