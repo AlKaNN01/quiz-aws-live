@@ -62,6 +62,10 @@ jobs:
         run: |
           cd GameAdmin
           mvn clean test -q
+        env:
+          DB_PASSWORD: postgres
+          DB_URL: jdbc:postgresql://localhost:5432/gameadmin
+          DB_USER: postgres
 
       - name: 🧹 Run GameEngine tests
         run: |
