@@ -20,6 +20,7 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 import java.util.Set;
@@ -44,6 +45,7 @@ public class GameFlowService {
 
     private final Map<String, ScheduledFuture<?>> questionTimers = new ConcurrentHashMap<>();
     private final Map<String, ScheduledFuture<?>> approvalTimers = new ConcurrentHashMap<>();
+    private final Map<String, ScheduledFuture<?>> tickTimers = new ConcurrentHashMap<>();
     private final Map<String, Integer> questionScores = new ConcurrentHashMap<>();
 
     // application.properties'den okunur — hardcoded sabit yerine konfigurasyon kullaniliyor
@@ -96,6 +98,22 @@ public class GameFlowService {
                 Instant.now().plusMillis(state.getTimerSeconds() * 1000L));
         questionTimers.put(gameId + ":question", future);
 
+        // ── Server-side timer tick ──
+        // Frontend saat senkronizasyonu için 200ms'de bir tick gönder
+        ScheduledFuture<?> tickFuture = taskScheduler.scheduleAtFixedRate(() -> {
+            GameState tickState = gameStateService.getState(gameId);
+            if (tickState != null && tickState.getStatus() == GameState.Status.QUESTION_ACTIVE) {
+                long elapsed = System.currentTimeMillis() - tickState.getQuestionStartedAt();
+                int remaining = Math.max(0, tickState.getTimerSeconds() - (int)(elapsed / 1000));
+
+                gameEventPublisher.broadcastToGame(gameId, new GameTick(
+                        gameId, questionId, remaining, System.currentTimeMillis()));
+                gameEventPublisher.broadcastToHost(gameId, new GameTick(
+                        gameId, questionId, remaining, System.currentTimeMillis()));
+            }
+        }, Instant.now(), Duration.ofMillis(200));
+        tickTimers.put(gameId + ":tick", tickFuture);
+
         log.info("Soru başladı: gameId={} index={} timer={}sn", gameId, questionIndex, state.getTimerSeconds());
     }
 
@@ -106,6 +124,7 @@ public class GameFlowService {
             log.warn("endQuestion: geçersiz durum, gameId={}", gameId); return;
         }
         cancelQuestionTimer(gameId);
+        cancelTickTimer(gameId);  // ← Tick timer'ı da dur
 
         String questionId = state.getCurrentQuestionId();
         gameStateService.updateStatus(gameId, GameState.Status.QUESTION_END);
@@ -432,6 +451,11 @@ public class GameFlowService {
 
     public void cancelQuestionTimer(String gameId) {
         ScheduledFuture<?> future = questionTimers.remove(gameId + ":question");
+        if (future != null) future.cancel(false);
+    }
+
+    public void cancelTickTimer(String gameId) {
+        ScheduledFuture<?> future = tickTimers.remove(gameId + ":tick");
         if (future != null) future.cancel(false);
     }
 

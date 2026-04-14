@@ -125,13 +125,21 @@ public class GameSessionService {
         return count != null ? count.intValue() : 0;
     }
 
-    public void deleteSession(String sessionId, String gameId, String nickname, String userId, String ipAddress) {
+    public void deleteSession(String sessionId, String gameId, String nickname, String userId, String ipAddress, String browserId) {
         redisTemplate.delete("session:" + sessionId);
         redisTemplate.delete("user_to_session:" + gameId + ":" + userId);
         redisTemplate.opsForSet().remove("game:" + gameId + ":players", sessionId);
         redisTemplate.opsForSet().remove("game:" + gameId + ":nicknames", nickname);
-        // Not: browser_sessions hash'inden tek entry'yi silmek için browserId gerekir.
-        // Ban/kick senaryosunda browserId bilinmeyebilir — hash TTL (3 saat) ile expire olur.
+        
+        // browserId varsa hash'ten explicit olarak sil
+        if (browserId != null && !browserId.isBlank()) {
+            redisTemplate.opsForHash().delete("game:" + gameId + ":browser_sessions", browserId);
+        }
+    }
+
+    // Geriye dönük uyumluluk — browserId olmayan çağrılar için
+    public void deleteSession(String sessionId, String gameId, String nickname, String userId, String ipAddress) {
+        deleteSession(sessionId, gameId, nickname, userId, ipAddress, null);
     }
 
     public List<String> getPlayerIds(String gameId) {

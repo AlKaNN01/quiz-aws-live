@@ -84,6 +84,11 @@ public class GameController {
                 throw GameException.lobbyNotOpen();
             }
 
+            // Host bağlı değilse oyuncu giremez
+            if (!state.isHostConnected()) {
+                throw GameException.hostNotConnected("Host bağlı olmadığı için oyuna katılamazsınız");
+            }
+
             GameSession session = gameSessionService.getOrCreateSession(
                     request.getGameId(), request.getNickname(),
                     ipAddress, sessionId, request.getBrowserId()

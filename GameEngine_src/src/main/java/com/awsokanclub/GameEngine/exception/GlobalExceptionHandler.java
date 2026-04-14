@@ -2,9 +2,9 @@
  * Global Exception Handler - Tüm exception'lar burada yakalanıp log edilir
  * Test aşamasında debug için detaylı bilgi verir
  */
-package com.awsokanclub.GameAdmin.exception;
+package com.awsokanclub.GameEngine.exception;
 
-import com.awsokanclub.GameAdmin.dto.response.ApiResponse;
+import com.awsokanclub.GameEngine.dto.response.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;

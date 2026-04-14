@@ -334,7 +334,8 @@ public class AdminController {
                     session.getUserId(),
                     session.getIpAddress(),
                     sessionId,
-                    request.getReason()
+                    request.getReason(),
+                    request.isBanIpAddress()
             );
 
             log.info("Oyuncu banlandı: userId={} gameId={}", request.getUserId(), request.getGameId());

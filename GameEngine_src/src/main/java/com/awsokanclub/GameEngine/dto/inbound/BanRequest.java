@@ -15,4 +15,5 @@ public class BanRequest {
     private String userId;
     private String adminToken;
     private String reason;
+    private boolean banIpAddress;  // Admin IP ban'ı da isterse seçebilir
 }

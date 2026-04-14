@@ -17,7 +17,8 @@ spring:
         format_sql: false
 
 server:
-  port: 8081
+  port: 8080
+  shutdown: graceful
 
 app:
   security:
@@ -25,6 +26,52 @@ app:
     jwt-expiration-ms: 86400000
     engine-token: ${ENGINE_TOKEN:local-engine-token-secret}
 
+# Management / Actuator Configuration
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+    shutdown:
+      enabled: true
+
+# Resilience4j Configuration
+resilience4j:
+  retry:
+    instances:
+      default:
+        max-attempts: 3
+        wait-duration: 500
+        retry-exceptions:
+          - java.io.IOException
+          - java.net.SocketTimeoutException
+  circuitbreaker:
+    instances:
+      default:
+        failure-rate-threshold: 50
+        slow-call-rate-threshold: 50
+        slow-call-duration-threshold: 2s
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+
+# Logging Configuration
 logging:
   level:
-    com.awsokanclub: INFO
+    root: INFO
+    com.awsokanclub: ${LOG_LEVEL:INFO}
+    org.springframework.web: INFO
+    org.springframework.security: INFO
+    org.hibernate.SQL: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: logs/game-admin.log
+    max-size: 10MB
+    max-history: 30

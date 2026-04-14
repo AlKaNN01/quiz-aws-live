@@ -1,0 +1,122 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: quiz-db
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - quiz-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: quiz-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - quiz-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # GameAdmin Backend (Port 8080)
+  game-admin:
+    build:
+      context: ./GameAdmin
+      dockerfile: Dockerfile
+    container_name: game-admin-app
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${DB_NAME}
+      SPRING_DATASOURCE_USERNAME: ${DB_USER}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+      SPRING_JWT_SECRET: ${ADMIN_JWT_SECRET}
+      SERVER_PORT: ${ADMIN_PORT}
+    ports:
+      - "${ADMIN_PORT}:${ADMIN_PORT}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - quiz-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${ADMIN_PORT}/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # GameEngine Backend (Port 8081)
+  game-engine:
+    build:
+      context: ./GameEngine_src
+      dockerfile: Dockerfile
+    container_name: game-engine-app
+    environment:
+      SPRING_REDIS_HOST: redis
+      SPRING_REDIS_PORT: 6379
+      SERVER_PORT: ${ENGINE_PORT}
+      APP_ALLOWED_ORIGINS: ${ENGINE_ALLOWED_ORIGINS}
+      APP_GAME_NEXT_QUESTION_COUNTDOWN_SECONDS: ${ENGINE_GAME_NEXT_COUNTDOWN}
+      APP_GAME_LEADERBOARD_APPROVAL_TIMEOUT_MS: ${ENGINE_GAME_APPROVAL_TIMEOUT}
+      GAME_ADMIN_URL: http://game-admin:${ADMIN_PORT}
+    ports:
+      - "${ENGINE_PORT}:${ENGINE_PORT}"
+    depends_on:
+      redis:
+        condition: service_healthy
+      game-admin:
+        condition: service_healthy
+    networks:
+      - quiz-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${ENGINE_PORT}/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # React Frontend (Port 3000)
+  frontend:
+    build:
+      context: ./quiz-frontend
+      dockerfile: Dockerfile
+      args:
+        REACT_APP_API_URL: ${REACT_APP_API_URL}
+        REACT_APP_WS_URL: ${REACT_APP_WS_URL}
+    container_name: quiz-frontend-app
+    ports:
+      - "3000:3000"
+    depends_on:
+      - game-admin
+      - game-engine
+    networks:
+      - quiz-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  quiz-network:
+    driver: bridge
