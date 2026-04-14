@@ -71,6 +71,10 @@ public class GameException extends RuntimeException {
         return new GameException("HOST_NOT_CONNECTED", "Host henuz baglanmadi.", false);
     }
 
+    public static GameException hostNotConnected(String message) {
+        return new GameException("HOST_NOT_CONNECTED", message, false);
+    }
+
     public static GameException gameAlreadyActive() {
         return new GameException("GAME_ALREADY_ACTIVE", "Oyun zaten baslatiliyor, lutfen bekleyin.", false);
     }

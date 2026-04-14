@@ -106,10 +106,14 @@ public class GameFlowService {
                 long elapsed = System.currentTimeMillis() - tickState.getQuestionStartedAt();
                 int remaining = Math.max(0, tickState.getTimerSeconds() - (int)(elapsed / 1000));
 
-                gameEventPublisher.broadcastToGame(gameId, new GameTick(
-                        gameId, questionId, remaining, System.currentTimeMillis()));
-                gameEventPublisher.broadcastToHost(gameId, new GameTick(
-                        gameId, questionId, remaining, System.currentTimeMillis()));
+                GameTick tick = GameTick.builder()
+                        .gameId(gameId)
+                        .questionId(questionId)
+                        .secondsRemaining(remaining)
+                        .timestamp(System.currentTimeMillis())
+                        .build();
+                gameEventPublisher.broadcastToGame(gameId, tick);
+                gameEventPublisher.broadcastToHost(gameId, tick);
             }
         }, Instant.now(), Duration.ofMillis(200));
         tickTimers.put(gameId + ":tick", tickFuture);

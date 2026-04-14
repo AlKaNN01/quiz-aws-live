@@ -15,6 +15,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class GameTick {
+    @Builder.Default
     private String type = "GAME_TICK";
     private String gameId;
     private String questionId;
