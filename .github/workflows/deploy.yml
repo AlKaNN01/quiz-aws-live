@@ -1,4 +1,4 @@
-name: 🚀 Build & Deploy to EC2
+name: Build & Deploy to EC2
 
 on:
   push:
@@ -9,20 +9,11 @@ on:
       - LiveBackend
     types: [opened, synchronize, reopened]
 
-env:
-  REGISTRY: ghcr.io
-  REGISTRY_USERNAME: ${{ github.actor }}
-
 jobs:
-  # Stage 1: Lint & Test
   test:
-    name: 🧪 Test & Build
+    name: Test & Build
     runs-on: ubuntu-latest
-    
-    strategy:
-      matrix:
-        java-version: ['21']
-    
+
     services:
       postgres:
         image: postgres:15-alpine
@@ -36,7 +27,7 @@ jobs:
           --health-retries 5
         ports:
           - 5432:5432
-      
+
       redis:
         image: redis:7-alpine
         options: >-
@@ -46,31 +37,27 @@ jobs:
           --health-retries 5
         ports:
           - 6379:6379
-    
+
     steps:
-      - name: 📥 Checkout code
+      - name: Checkout code
         uses: actions/checkout@v4
-      
-      - name: ☕ Setup JDK ${{ matrix.java-version }}
+
+      - name: Setup JDK 21
         uses: actions/setup-java@v4
         with:
-          java-version: ${{ matrix.java-version }}
+          java-version: '21'
           distribution: 'temurin'
           cache: maven
-      
-      - name: 🧹 Run GameAdmin tests
-        run: |
-          cd GameAdmin
-          mvn clean test -q
+
+      - name: Run GameAdmin tests
+        run: cd GameAdmin && mvn clean test -q
         env:
           DB_PASSWORD: postgres
           DB_URL: jdbc:postgresql://localhost:5432/gameadmin
           DB_USER: postgres
 
-      - name: 🧹 Run GameEngine tests
-        run: |
-          cd GameEngine_src
-          mvn clean test -q
+      - name: Run GameEngine tests
+        run: cd GameEngine_src && mvn clean test -q
         env:
           REDIS_HOST: localhost
           REDIS_PORT: 6379
@@ -78,205 +65,74 @@ jobs:
           ENGINE_TOKEN: ci-test-engine-token
           ALLOWED_ORIGINS: http://localhost:3000
           GAME_ADMIN_URL: http://localhost:8080
-      
-      - name: 🔨 Build GameAdmin JAR
-        run: |
-          cd GameAdmin
-          mvn clean package -DskipTests -q
-      
-      - name: 🔨 Build GameEngine JAR
-        run: |
-          cd GameEngine_src
-          mvn clean package -DskipTests -q
-      
-      - name: 🌐 Build Frontend
-        run: |
-          cd quiz-frontend
-          npm install --legacy-peer-deps
-          npm run build
-      
-      - name: ✅ Verify Docker builds
+
+      - name: Build GameAdmin JAR
+        run: cd GameAdmin && mvn clean package -DskipTests -q
+
+      - name: Build GameEngine JAR
+        run: cd GameEngine_src && mvn clean package -DskipTests -q
+
+      - name: Build Frontend
+        run: cd quiz-frontend && npm install --legacy-peer-deps && npm run build
+
+      - name: Verify Docker builds
         run: |
           docker build -f GameAdmin/Dockerfile -t quiz-admin:test GameAdmin/
           docker build -f GameEngine_src/Dockerfile -t quiz-engine:test GameEngine_src/
           docker build -f quiz-frontend/Dockerfile -t quiz-frontend:test quiz-frontend/
 
-  # Stage 2: Build & Push Docker Images (only on main)
-  build:
-    name: 📦 Build Docker Images
+  deploy:
+    name: Deploy to Production
     runs-on: ubuntu-latest
     needs: test
     if: github.ref == 'refs/heads/LiveBackend' && github.event_name == 'push'
-    
-    permissions:
-      contents: read
-      packages: write
-    
-    steps:
-      - name: 📥 Checkout code
-        uses: actions/checkout@v4
-      
-      - name: 🔐 Login to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ env.REGISTRY_USERNAME }}
-          password: ${{ secrets.GHCR_TOKEN }}
-      
-      - name: 📦 Build & Push GameAdmin image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./GameAdmin
-          file: ./GameAdmin/Dockerfile
-          push: true
-          tags: ${{ env.REGISTRY }}/${{ github.repository }}/game-admin:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-      
-      - name: 📦 Build & Push GameEngine image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./GameEngine_src
-          file: ./GameEngine_src/Dockerfile
-          push: true
-          tags: ${{ env.REGISTRY }}/${{ github.repository }}/game-engine:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-      
-      - name: 📦 Build & Push Frontend image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./quiz-frontend
-          file: ./quiz-frontend/Dockerfile
-          push: true
-          tags: ${{ env.REGISTRY }}/${{ github.repository }}/frontend:latest
-          build-args: |
-            REACT_APP_API_URL=https://${{ secrets.DOMAIN }}
-            REACT_APP_WS_URL=wss://${{ secrets.DOMAIN }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
 
-  # Stage 3: Deploy to EC2 (only on main)
-  deploy:
-    name: 🚀 Deploy to Production
-    runs-on: ubuntu-latest
-    needs: [test, build]
-    if: github.ref == 'refs/heads/LiveBackend' && github.event_name == 'push'
-    
     steps:
-      - name: 📥 Checkout code
-        uses: actions/checkout@v4
-      
-      - name: 🔑 Setup SSH
+      - name: Setup SSH
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ secrets.EC2_IP }} >> ~/.ssh/known_hosts 2>/dev/null
-      
-      - name: 🌐 Create .env file on EC2
+
+      - name: Copy .env to EC2
+        env:
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          ENGINE_TOKEN: ${{ secrets.ENGINE_TOKEN }}
+          DOMAIN: ${{ secrets.DOMAIN }}
         run: |
-          ssh -i ~/.ssh/id_rsa ubuntu@${{ secrets.EC2_IP }} << 'EOF'
+          printf "DB_PASSWORD=%s\nREDIS_PASSWORD=%s\nJWT_SECRET=%s\nENGINE_TOKEN=%s\nENVIRONMENT=production\nLOG_LEVEL=INFO\nREACT_APP_API_URL=https://%s\nREACT_APP_WS_URL=wss://%s\nALLOWED_ORIGINS=https://%s\nGAME_ADMIN_URL=http://game-admin:8080\n" \
+            "$DB_PASSWORD" "$REDIS_PASSWORD" "$JWT_SECRET" "$ENGINE_TOKEN" \
+            "$DOMAIN" "$DOMAIN" "$DOMAIN" > /tmp/prod.env
+          scp -i ~/.ssh/id_rsa /tmp/prod.env ubuntu@${{ secrets.EC2_IP }}:/home/ubuntu/app/.env
+
+      - name: Deploy on EC2
+        run: |
+          ssh -i ~/.ssh/id_rsa ubuntu@${{ secrets.EC2_IP }} 'set -e
             cd /home/ubuntu/app
-            cat > .env << 'ENVFILE'
-            DB_PASSWORD=${{ secrets.DB_PASSWORD }}
-            REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}
-            JWT_SECRET=${{ secrets.JWT_SECRET }}
-            ENGINE_TOKEN=${{ secrets.ENGINE_TOKEN }}
-            ENVIRONMENT=production
-            LOG_LEVEL=INFO
-            REACT_APP_API_URL=https://${{ secrets.DOMAIN }}
-            REACT_APP_WS_URL=wss://${{ secrets.DOMAIN }}
-            ALLOWED_ORIGINS=https://${{ secrets.DOMAIN }}
-            GAME_ADMIN_URL=http://game-admin:8080
-            ENVFILE
             chmod 600 .env
-          EOF
-      
-      - name: 🐳 Deploy containers to EC2
-        run: |
-          ssh -i ~/.ssh/id_rsa ubuntu@${{ secrets.EC2_IP }} << 'EOF'
-            cd /home/ubuntu/app
-            
-            # Pull latest code
             git fetch origin
-            git checkout main
-            git pull origin main
-            
-            # Create required directories
-            mkdir -p data/{db,redis,certs,logs/nginx}
-            
-            # Stop and remove old containers
+            git checkout LiveBackend
+            git pull origin LiveBackend
+            mkdir -p data/db data/redis data/certs data/logs/nginx
             docker-compose -f docker-compose-prod.yml down || true
-            
-            # Load environment
-            export $(cat .env | xargs)
-            
-            # Pull and build latest images
-            docker-compose -f docker-compose-prod.yml pull
-            docker-compose -f docker-compose-prod.yml build --pull
-            
-            # Start containers
-            docker-compose -f docker-compose-prod.yml up -d
-            
-            # Wait for services to be healthy
-            echo "⏳ Waiting for services to be healthy..."
-            sleep 15
-            
-            # Verify deployment
-            echo "🔍 Checking service health..."
-            curl -f http://localhost:8080/actuator/health > /dev/null 2>&1
-            if [ $? -ne 0 ]; then
-              echo "❌ GameAdmin health check failed"
-              docker-compose -f docker-compose-prod.yml logs game-admin
-              exit 1
-            fi
-            
-            curl -f http://localhost:8081/actuator/health > /dev/null 2>&1
-            if [ $? -ne 0 ]; then
-              echo "❌ GameEngine health check failed"
-              docker-compose -f docker-compose-prod.yml logs game-engine
-              exit 1
-            fi
-            
-            echo "✅ All services are healthy"
-          EOF
-      
-      - name: 📊 Check domain accessibility
+            docker-compose -f docker-compose-prod.yml up -d --build
+            sleep 20
+            curl -sf http://localhost:8080/actuator/health || (echo "GameAdmin unhealthy" && docker-compose -f docker-compose-prod.yml logs --tail=30 game-admin && exit 1)
+            curl -sf http://localhost:8081/actuator/health || (echo "GameEngine unhealthy" && docker-compose -f docker-compose-prod.yml logs --tail=30 game-engine && exit 1)
+            echo "All services healthy"'
+
+      - name: Check domain
         run: |
-          echo "🌐 Checking domain: https://${{ secrets.DOMAIN }}"
-          for i in {1..10}; do
+          for i in $(seq 1 10); do
             STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://${{ secrets.DOMAIN }} || echo "000")
-            if [ "$STATUS" = "200" ] || [ "$STATUS" = "404" ]; then
-              echo "✅ Domain is accessible (HTTP $STATUS)"
-              break
+            if [ "$STATUS" = "200" ] || [ "$STATUS" = "301" ] || [ "$STATUS" = "302" ]; then
+              echo "Domain accessible (HTTP $STATUS)"
+              exit 0
             fi
-            echo "⏳ Attempt $i/10 - Status: $STATUS, retrying..."
+            echo "Attempt $i/10 - HTTP $STATUS, retrying..."
             sleep 5
           done
-      
-      - name: 📬 Slack Notification (Success)
-        if: success()
-        uses: 8398a7/action-slack@v3
-        with:
-          status: success
-          text: |
-            ✅ *Deployment Successful*
-            🌐 Domain: https://${{ secrets.DOMAIN }}
-            📦 Commit: ${{ github.sha }}
-            👤 Author: ${{ github.actor }}
-          webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
-        continue-on-error: true
-      
-      - name: 📬 Slack Notification (Failure)
-        if: failure()
-        uses: 8398a7/action-slack@v3
-        with:
-          status: failure
-          text: |
-            ❌ *Deployment Failed*
-            🔗 Logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-            👤 Author: ${{ github.actor }}
-          webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
-        continue-on-error: true
-
+          echo "Domain check inconclusive - deploy may still be starting"
