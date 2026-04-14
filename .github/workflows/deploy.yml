@@ -119,10 +119,21 @@ jobs:
             mkdir -p data/db data/redis data/certs data/logs/nginx
             docker-compose -f docker-compose-prod.yml down || true
             docker-compose -f docker-compose-prod.yml up -d --build
-            sleep 20
-            curl -sf http://localhost:8080/actuator/health || (echo "GameAdmin unhealthy" && docker-compose -f docker-compose-prod.yml logs --tail=30 game-admin && exit 1)
-            curl -sf http://localhost:8081/actuator/health || (echo "GameEngine unhealthy" && docker-compose -f docker-compose-prod.yml logs --tail=30 game-engine && exit 1)
-            echo "All services healthy"'
+            echo "Waiting for services to become healthy..."
+            for i in $(seq 1 24); do
+              sleep 5
+              ADMIN_OK=$(curl -sf http://localhost:8080/actuator/health > /dev/null 2>&1 && echo "yes" || echo "no")
+              ENGINE_OK=$(curl -sf http://localhost:8081/actuator/health > /dev/null 2>&1 && echo "yes" || echo "no")
+              echo "Attempt $i/24 — GameAdmin: $ADMIN_OK, GameEngine: $ENGINE_OK"
+              if [ "$ADMIN_OK" = "yes" ] && [ "$ENGINE_OK" = "yes" ]; then
+                echo "All services healthy"
+                exit 0
+              fi
+            done
+            echo "=== Services not healthy after 2 minutes ==="
+            docker-compose -f docker-compose-prod.yml logs --tail=40 game-admin
+            docker-compose -f docker-compose-prod.yml logs --tail=40 game-engine
+            exit 1'
 
       - name: Check domain
         run: |
