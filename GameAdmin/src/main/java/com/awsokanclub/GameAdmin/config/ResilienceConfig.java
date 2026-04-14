@@ -61,13 +61,10 @@ public class ResilienceConfig {
                 .recordException(exception -> isRetryable(exception))
                 .build();
 
-        CircuitBreakerRegistry registry = CircuitBreakerRegistry.of(config);
+        CircuitBreakerRegistry registry = CircuitBreakerRegistry.of(config, registerCircuitBreakerEventConsumer());
         registry.getEventPublisher()
                 .onEntryAdded(event -> log.info("CircuitBreaker config registered: {}", event.getAddedEntry().getName()))
                 .onEntryRemoved(event -> log.info("CircuitBreaker config removed: {}", event.getRemovedEntry().getName()));
-
-        // Register event consumer for monitoring
-        registry.getEventPublisher().onEntryAdded(registerCircuitBreakerEventConsumer());
 
         return registry;
     }
@@ -90,20 +87,20 @@ public class ResilienceConfig {
     private RegistryEventConsumer<CircuitBreaker> registerCircuitBreakerEventConsumer() {
         return new RegistryEventConsumer<CircuitBreaker>() {
             @Override
-            public void onEntryAdded(EntryAddedEvent<CircuitBreaker> event) {
+            public void onEntryAddedEvent(EntryAddedEvent<CircuitBreaker> event) {
                 CircuitBreaker cb = event.getAddedEntry();
                 cb.getEventPublisher()
-                        .onStateTransition(e -> log.warn("CircuitBreaker [{}] transition: {} -> {}", 
+                        .onStateTransition(e -> log.warn("CircuitBreaker [{}] transition: {} -> {}",
                                 cb.getName(), e.getStateTransition().getFromState(), e.getStateTransition().getToState()))
                         .onError(e -> log.debug("CircuitBreaker [{}] recorded error: {}", cb.getName(), e.getThrowable().getMessage()))
                         .onSuccess(e -> log.debug("CircuitBreaker [{}] recorded success", cb.getName()));
             }
 
             @Override
-            public void onEntryRemoved(EntryRemovedEvent<CircuitBreaker> event) {}
+            public void onEntryRemovedEvent(EntryRemovedEvent<CircuitBreaker> event) {}
 
             @Override
-            public void onEntryReplaced(EntryReplacedEvent<CircuitBreaker> event) {}
+            public void onEntryReplacedEvent(EntryReplacedEvent<CircuitBreaker> event) {}
         };
     }
 }
