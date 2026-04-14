@@ -80,7 +80,20 @@ public class AdminController {
      */
     private void sendHydration(String gameId, String principalName) {
         GameState state = gameStateService.getState(gameId);
-        if (state == null || state.getStatus() == GameState.Status.WAITING) return;
+        if (state == null) return;
+
+        // WAITING aşamasında: host/lobi durumunu bildir (race condition fix)
+        if (state.getStatus() == GameState.Status.WAITING) {
+            if (state.isHostConnected()) {
+                gameEventPublisher.sendToAdmin(principalName,
+                        Map.of("type", "HOST_CONNECTED", "gameId", gameId));
+            }
+            if (state.isLobbyOpen()) {
+                gameEventPublisher.sendToAdmin(principalName,
+                        Map.of("type", "LOBBY_OPENED", "gameId", gameId));
+            }
+            return;
+        }
 
         Map<String, Object> hydrate = new LinkedHashMap<>();
         hydrate.put("type", "ADMIN_HYDRATE");

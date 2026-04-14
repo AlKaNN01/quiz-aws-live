@@ -55,6 +55,7 @@ export default function PlayerPage() {
   const countdownRef = useRef(null);
   const retryJoinRef = useRef(null);
   const answerSubmittedRef = useRef(false);
+  const lobbyWaitingRef = useRef(false);
 
   useEffect(() => {
     sessionRef.current = session;
@@ -217,6 +218,15 @@ export default function PlayerPage() {
 
         case "ERROR":
           setError(msg.message);
+          if (msg.errorCode === "LOBBY_NOT_OPEN" || msg.errorCode === "HOST_NOT_CONNECTED") {
+            // Lobi açılmamış — bekle, navigate etme
+            lobbyWaitingRef.current = true;
+          } else {
+            // Fatal error: retry'ı durdur ve anasayfaya yönlendir
+            lobbyWaitingRef.current = false;
+            clearInterval(retryJoinRef.current);
+            navigate("/");
+          }
           break;
 
         default:
@@ -294,6 +304,12 @@ export default function PlayerPage() {
         const MAX_RETRIES = 5;
         retryJoinRef.current = setInterval(() => {
           if (!sessionRef.current) {
+            // Lobi bekleme modundaysa sayaç sıfırla — navigate etme
+            if (lobbyWaitingRef.current) {
+              retryCount = 0;
+              sendJoinRequest();
+              return;
+            }
             retryCount++;
             if (retryCount >= MAX_RETRIES) {
               clearInterval(retryJoinRef.current);
@@ -304,7 +320,7 @@ export default function PlayerPage() {
           } else {
             clearInterval(retryJoinRef.current);
           }
-        }, 1000);
+        }, 2000);
       },
       onStompError: (frame) => {
         if (screenRef.current !== STATES.BANNED) {
