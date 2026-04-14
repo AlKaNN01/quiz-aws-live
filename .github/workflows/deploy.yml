@@ -71,6 +71,13 @@ jobs:
         run: |
           cd GameEngine_src
           mvn clean test -q
+        env:
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          JWT_SECRET: ci-test-secret-key-32-chars-minimum
+          ENGINE_TOKEN: ci-test-engine-token
+          ALLOWED_ORIGINS: http://localhost:3000
+          GAME_ADMIN_URL: http://localhost:8080
       
       - name: 🔨 Build GameAdmin JAR
         run: |
