@@ -98,6 +98,7 @@ public class GameAdminClient {
             log.info("Oturum sonlandirma bildirildi: sessionCode={}", sessionCode);
         } catch (Exception e) {
             log.error("Oturum sonlandirilamadi: sessionCode={} hata={}", sessionCode, e.getMessage());
+            throw new RuntimeException("GameAdmin oturum sonlandirma bildirimi basarisiz: " + sessionCode, e);
         }
     }
 

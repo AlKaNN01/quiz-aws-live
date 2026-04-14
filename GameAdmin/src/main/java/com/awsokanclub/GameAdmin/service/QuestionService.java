@@ -28,8 +28,8 @@ public class QuestionService {
     public QuestionResponse addQuestion(Long gameId, CreateQuestionRequest request) {
         Game game = gameRepository.findById(gameId)
                 .orElseThrow(() -> GameAdminException.notFound("Oyun bulunamadi."));
-        if (game.getStatus() != Game.Status.DRAFT) {
-            throw GameAdminException.badRequest("Yayindaki oyuna soru eklenemez.");
+        if (game.getStatus() == Game.Status.ACTIVE || game.getStatus() == Game.Status.FINISHED) {
+            throw GameAdminException.badRequest("Aktif veya tamamlanmis oyuna soru eklenemez.");
         }
 
         Question question = Question.builder()
@@ -52,6 +52,10 @@ public class QuestionService {
     public QuestionResponse updateQuestion(Long questionId, CreateQuestionRequest request) {
         Question question = questionRepository.findById(questionId)
                 .orElseThrow(() -> GameAdminException.notFound("Soru bulunamadi."));
+        Game.Status status = question.getGame().getStatus();
+        if (status == Game.Status.ACTIVE || status == Game.Status.FINISHED) {
+            throw GameAdminException.badRequest("Aktif veya tamamlanmis oyunun sorusu degistirilemez.");
+        }
 
         question.setText(request.getText());
         question.setOptionA(request.getOptionA());
@@ -67,8 +71,11 @@ public class QuestionService {
     }
 
     public void deleteQuestion(Long questionId) {
-        if (!questionRepository.existsById(questionId)) {
-            throw GameAdminException.notFound("Soru bulunamadi.");
+        Question question = questionRepository.findById(questionId)
+                .orElseThrow(() -> GameAdminException.notFound("Soru bulunamadi."));
+        Game.Status status = question.getGame().getStatus();
+        if (status == Game.Status.ACTIVE || status == Game.Status.FINISHED) {
+            throw GameAdminException.badRequest("Aktif veya tamamlanmis oyunun sorusu silinemez.");
         }
         questionRepository.deleteById(questionId);
         log.info("Soru silindi: {}", questionId);

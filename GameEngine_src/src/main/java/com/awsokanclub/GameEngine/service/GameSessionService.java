@@ -42,51 +42,56 @@ public class GameSessionService {
     public GameSession getOrCreateSession(String gameId, String nickname,
                                           String ipAddress, String principalName,
                                           String browserId) {
-        String dedupKey = (browserId != null && !browserId.isBlank()) ? browserId : principalName;
+        try {
+            String dedupKey = (browserId != null && !browserId.isBlank()) ? browserId : principalName;
 
-        Object existingSessionId = redisTemplate.opsForHash().get("game:" + gameId + ":browser_sessions", dedupKey);
-        if (existingSessionId != null) {
-            GameSession existing = getSession(existingSessionId.toString());
-            if (existing != null && existing.getStatus() != GameSession.Status.BANNED) {
-                existing.setPrincipalName(principalName);
-                redisTemplate.opsForValue().set("session:" + existing.getSessionId(), existing, 2, TimeUnit.HOURS);
-                log.info("Mevcut session guncellendi (ayni browser): {} nickname: {}", existing.getSessionId(), existing.getNickname());
-                return existing;
+            Object existingSessionId = redisTemplate.opsForHash().get("game:" + gameId + ":browser_sessions", dedupKey);
+            if (existingSessionId != null) {
+                GameSession existing = getSession(existingSessionId.toString());
+                if (existing != null && existing.getStatus() != GameSession.Status.BANNED) {
+                    existing.setPrincipalName(principalName);
+                    redisTemplate.opsForValue().set("session:" + existing.getSessionId(), existing, 2, TimeUnit.HOURS);
+                    log.info("Mevcut session guncellendi (ayni browser): {} nickname: {}", existing.getSessionId(), existing.getNickname());
+                    return existing;
+                }
             }
+
+            // Yeni session olustur — once nickname kontrolu
+            Long added = redisTemplate.opsForSet().add("game:" + gameId + ":nicknames", nickname);
+            if (added == null || added == 0) return null;
+
+            String sessionId = UUID.randomUUID().toString().replace("-", "").substring(0, 16);
+            String userId = "user_" + UUID.randomUUID().toString().substring(0, 8);
+
+            GameSession session = GameSession.builder()
+                    .sessionId(sessionId)
+                    .userId(userId)
+                    .nickname(nickname)
+                    .gameId(gameId)
+                    .ipAddress(ipAddress)
+                    .principalName(principalName)
+                    .joinedAt(System.currentTimeMillis())
+                    .status(GameSession.Status.ACTIVE)
+                    .build();
+
+            redisTemplate.opsForValue().set("session:" + sessionId, session, 2, TimeUnit.HOURS);
+            redisTemplate.opsForSet().add("game:" + gameId + ":players", sessionId);
+            redisTemplate.expire("game:" + gameId + ":players", 3, TimeUnit.HOURS);
+            redisTemplate.expire("game:" + gameId + ":nicknames", 3, TimeUnit.HOURS);
+
+            // userId -> sessionId index
+            redisTemplate.opsForValue().set("user_to_session:" + gameId + ":" + userId, sessionId, 3, TimeUnit.HOURS);
+
+            // browserId/fallback -> sessionId index (aynı tarayıcıdan tekrar join gelirse yakalanır)
+            redisTemplate.opsForHash().put("game:" + gameId + ":browser_sessions", dedupKey, sessionId);
+            redisTemplate.expire("game:" + gameId + ":browser_sessions", 3, TimeUnit.HOURS);
+
+            log.info("Session olusturuldu: {} nickname: {} browserId: {}", sessionId, nickname, dedupKey);
+            return session;
+        } catch (Exception e) {
+            log.error("Redis hatasi - session olusturulamadi: gameId={} nickname={} hata={}", gameId, nickname, e.getMessage(), e);
+            throw new RuntimeException("Oyuna katilim sirasinda bir hata olustu.", e);
         }
-
-        // Yeni session olustur — once nickname kontrolu
-        Long added = redisTemplate.opsForSet().add("game:" + gameId + ":nicknames", nickname);
-        if (added == null || added == 0) return null;
-
-        String sessionId = UUID.randomUUID().toString().replace("-", "").substring(0, 16);
-        String userId = "user_" + UUID.randomUUID().toString().substring(0, 8);
-
-        GameSession session = GameSession.builder()
-                .sessionId(sessionId)
-                .userId(userId)
-                .nickname(nickname)
-                .gameId(gameId)
-                .ipAddress(ipAddress)
-                .principalName(principalName)
-                .joinedAt(System.currentTimeMillis())
-                .status(GameSession.Status.ACTIVE)
-                .build();
-
-        redisTemplate.opsForValue().set("session:" + sessionId, session, 2, TimeUnit.HOURS);
-        redisTemplate.opsForSet().add("game:" + gameId + ":players", sessionId);
-        redisTemplate.expire("game:" + gameId + ":players", 3, TimeUnit.HOURS);
-        redisTemplate.expire("game:" + gameId + ":nicknames", 3, TimeUnit.HOURS);
-
-        // userId -> sessionId index
-        redisTemplate.opsForValue().set("user_to_session:" + gameId + ":" + userId, sessionId, 3, TimeUnit.HOURS);
-
-        // browserId/fallback -> sessionId index (aynı tarayıcıdan tekrar join gelirse yakalanır)
-        redisTemplate.opsForHash().put("game:" + gameId + ":browser_sessions", dedupKey, sessionId);
-        redisTemplate.expire("game:" + gameId + ":browser_sessions", 3, TimeUnit.HOURS);
-
-        log.info("Session olusturuldu: {} nickname: {} browserId: {}", sessionId, nickname, dedupKey);
-        return session;
     }
 
     // Geriye dönük uyumluluk — browserId olmayan çağrılar için
@@ -95,9 +100,14 @@ public class GameSessionService {
     }
 
     public GameSession getSession(String sessionId) {
-        Object obj = redisTemplate.opsForValue().get("session:" + sessionId);
-        if (obj instanceof GameSession) return (GameSession) obj;
-        return null;
+        try {
+            Object obj = redisTemplate.opsForValue().get("session:" + sessionId);
+            if (obj instanceof GameSession) return (GameSession) obj;
+            return null;
+        } catch (Exception e) {
+            log.error("Redis hatasi - session okunamadi: sessionId={} hata={}", sessionId, e.getMessage());
+            return null;
+        }
     }
 
     /*
@@ -106,34 +116,58 @@ public class GameSessionService {
      * Yeni yontem: user_to_session index'ine tek sorgu.
      */
     public GameSession getSessionByUserId(String gameId, String userId) {
-        Object sidObj = redisTemplate.opsForValue().get("user_to_session:" + gameId + ":" + userId);
-        if (sidObj == null) return null;
-        return getSession(sidObj.toString());
+        try {
+            Object sidObj = redisTemplate.opsForValue().get("user_to_session:" + gameId + ":" + userId);
+            if (sidObj == null) return null;
+            return getSession(sidObj.toString());
+        } catch (Exception e) {
+            log.error("Redis hatasi - userId ile session okunamadi: gameId={} userId={} hata={}", gameId, userId, e.getMessage());
+            return null;
+        }
     }
 
     public boolean isNicknameTaken(String gameId, String nickname) {
-        return Boolean.TRUE.equals(redisTemplate.opsForSet().isMember("game:" + gameId + ":nicknames", nickname));
+        try {
+            return Boolean.TRUE.equals(redisTemplate.opsForSet().isMember("game:" + gameId + ":nicknames", nickname));
+        } catch (Exception e) {
+            log.error("Redis hatasi - nickname kontrolu yapilamadi: gameId={} hata={}", gameId, e.getMessage());
+            return true; // güvenli default: şüphelenilen nickname'i reddet
+        }
     }
 
     public int getPlayerCount(String gameId) {
-        Long count = redisTemplate.opsForSet().size("game:" + gameId + ":players");
-        return count != null ? count.intValue() : 0;
+        try {
+            Long count = redisTemplate.opsForSet().size("game:" + gameId + ":players");
+            return count != null ? count.intValue() : 0;
+        } catch (Exception e) {
+            log.error("Redis hatasi - oyuncu sayisi okunamadi: gameId={} hata={}", gameId, e.getMessage());
+            return 0;
+        }
     }
 
     public int getAnsweredCount(String gameId, String questionId) {
-        Long count = redisTemplate.opsForSet().size("answered:" + gameId + ":" + questionId);
-        return count != null ? count.intValue() : 0;
+        try {
+            Long count = redisTemplate.opsForSet().size("answered:" + gameId + ":" + questionId);
+            return count != null ? count.intValue() : 0;
+        } catch (Exception e) {
+            log.error("Redis hatasi - cevap sayisi okunamadi: gameId={} questionId={} hata={}", gameId, questionId, e.getMessage());
+            return 0;
+        }
     }
 
     public void deleteSession(String sessionId, String gameId, String nickname, String userId, String ipAddress, String browserId) {
-        redisTemplate.delete("session:" + sessionId);
-        redisTemplate.delete("user_to_session:" + gameId + ":" + userId);
-        redisTemplate.opsForSet().remove("game:" + gameId + ":players", sessionId);
-        redisTemplate.opsForSet().remove("game:" + gameId + ":nicknames", nickname);
-        
-        // browserId varsa hash'ten explicit olarak sil
-        if (browserId != null && !browserId.isBlank()) {
-            redisTemplate.opsForHash().delete("game:" + gameId + ":browser_sessions", browserId);
+        try {
+            redisTemplate.delete("session:" + sessionId);
+            redisTemplate.delete("user_to_session:" + gameId + ":" + userId);
+            redisTemplate.opsForSet().remove("game:" + gameId + ":players", sessionId);
+            redisTemplate.opsForSet().remove("game:" + gameId + ":nicknames", nickname);
+
+            // browserId varsa hash'ten explicit olarak sil
+            if (browserId != null && !browserId.isBlank()) {
+                redisTemplate.opsForHash().delete("game:" + gameId + ":browser_sessions", browserId);
+            }
+        } catch (Exception e) {
+            log.error("Redis hatasi - session silinemedi: sessionId={} gameId={} hata={}", sessionId, gameId, e.getMessage());
         }
     }
 
@@ -143,8 +177,13 @@ public class GameSessionService {
     }
 
     public List<String> getPlayerIds(String gameId) {
-        Set<Object> members = redisTemplate.opsForSet().members("game:" + gameId + ":players");
-        if (members == null) return new ArrayList<>();
-        return members.stream().map(Object::toString).toList();
+        try {
+            Set<Object> members = redisTemplate.opsForSet().members("game:" + gameId + ":players");
+            if (members == null) return new ArrayList<>();
+            return members.stream().map(Object::toString).toList();
+        } catch (Exception e) {
+            log.error("Redis hatasi - oyuncu listesi okunamadi: gameId={} hata={}", gameId, e.getMessage());
+            return new ArrayList<>();
+        }
     }
 }
