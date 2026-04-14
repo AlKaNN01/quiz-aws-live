@@ -18,9 +18,9 @@ public class ProfanityFilter {
 
     private static final Set<String> BLOCKED_WORDS = Set.of(
         // Türkçe
-        "orospu", "bok", "sik", "orospu", "amk", "amına", "amina",
-        "götveren", "otuzbir", "ibne", "pezevenk", "oruspu",
-        "yarrak", "taşak", "amcık", "bok",
+        "orospu", "oruspu", "bok", "sik", "amk", "amına", "amina",
+        "götveren", "otuzbir", "ibne", "pezevenk",
+        "yarrak", "taşak", "amcık",
         // İngilizce
         "fuck", "shit", "cunt", "bitch", "asshole", "nigger", "faggot"
     );
