@@ -33,6 +33,12 @@ public class GameController {
         return ResponseEntity.ok(gameService.publishGame(gameId));
     }
 
+    @PostMapping("/{gameId}/start")
+    public ResponseEntity<Map<String, String>> startSession(@PathVariable Long gameId) {
+        String sessionCode = gameService.startSession(gameId);
+        return ResponseEntity.ok(Map.of("sessionCode", sessionCode));
+    }
+
     @GetMapping("/{gameId}")
     public ResponseEntity<GameResponse> getGame(@PathVariable Long gameId) {
         return ResponseEntity.ok(gameService.getGame(gameId));
