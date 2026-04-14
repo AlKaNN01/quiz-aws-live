@@ -51,7 +51,7 @@ public class GameState {
         Status.QUESTION_ACTIVE,   EnumSet.of(Status.QUESTION_END),
         Status.QUESTION_END,      EnumSet.of(Status.ANSWER_REVEAL),
         Status.ANSWER_REVEAL,     EnumSet.of(Status.LEADERBOARD_REVIEW),
-        Status.LEADERBOARD_REVIEW,EnumSet.of(Status.SCORE_REVEALING),
+        Status.LEADERBOARD_REVIEW,EnumSet.of(Status.SCORE_REVEALING, Status.FINISHED),
         Status.SCORE_REVEALING,   EnumSet.of(Status.COUNTDOWN, Status.FINISHED),
         Status.FINISHED,          EnumSet.of(Status.WAITING)
     );

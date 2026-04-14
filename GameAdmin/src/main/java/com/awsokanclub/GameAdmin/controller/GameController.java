@@ -85,4 +85,11 @@ public class GameController {
         return ResponseEntity.ok(gameService.getResults(gameId));
     }
 
+    // GameEngine oyun bitince buraya POST atar — joinCode temizlenir, quiz PUBLISHED olur
+    @PostMapping("/session/{sessionCode}/end")
+    public ResponseEntity<Void> endSession(@PathVariable String sessionCode) {
+        gameService.endSession(sessionCode);
+        return ResponseEntity.ok().build();
+    }
+
 }
