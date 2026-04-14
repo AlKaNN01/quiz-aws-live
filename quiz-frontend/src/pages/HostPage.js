@@ -163,7 +163,12 @@ export default function HostPage() {
         );
         // Sunucudan gelen hataları yakala (token geçersizse buraya gelir)
         client.subscribe(`/user/queue/personal`, (msg) => {
-          addDebug(`← personal: ${msg.body.slice(0, 120)}`);
+          try {
+            const parsed = JSON.parse(msg.body);
+            addDebug(`← personal: type=${parsed.type} code=${parsed.errorCode || '-'} msg=${String(parsed.message || '').slice(0, 60)}`);
+          } catch {
+            addDebug(`← personal: ${String(msg.body || '').slice(0, 120)}`);
+          }
         });
         addDebug(`host.connect gönderiliyor → kod: ${code}`);
         client.publish({

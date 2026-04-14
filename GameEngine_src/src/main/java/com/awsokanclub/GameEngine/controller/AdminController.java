@@ -85,10 +85,15 @@ public class AdminController {
         // WAITING aşamasında: host/lobi durumunu bildir (race condition fix)
         if (state.getStatus() == GameState.Status.WAITING) {
             if (state.isHostConnected()) {
+                // Hem broadcast hem personal queue — hangisi çalışıyorsa tutsun
+                gameEventPublisher.broadcastToHost(gameId,
+                        Map.of("type", "HOST_CONNECTED", "gameId", gameId));
                 gameEventPublisher.sendToAdmin(principalName,
                         Map.of("type", "HOST_CONNECTED", "gameId", gameId));
             }
             if (state.isLobbyOpen()) {
+                gameEventPublisher.broadcastToHost(gameId,
+                        Map.of("type", "LOBBY_OPENED", "gameId", gameId));
                 gameEventPublisher.sendToAdmin(principalName,
                         Map.of("type", "LOBBY_OPENED", "gameId", gameId));
             }
@@ -185,13 +190,15 @@ public class AdminController {
 
             String adminPrincipal = gameStateService.getAdminPrincipal(gameId);
             log.info("Host bağlandı: gameId={} adminPrincipal={}", gameId, adminPrincipal);
+            // HOST_CONNECTED'ı hem broadcast hem personal queue ile gönder —
+            // convertAndSendToUser güvenilmez olabilir, broadcast kesin çalışır.
+            gameEventPublisher.broadcastToHost(gameId,
+                    Map.of("type", "HOST_CONNECTED", "gameId", gameId));
             if (adminPrincipal != null) {
                 gameEventPublisher.sendToAdmin(adminPrincipal,
                         Map.of("type", "HOST_CONNECTED", "gameId", gameId));
-                log.info("HOST_CONNECTED gönderildi: gameId={} principal={}", gameId, adminPrincipal);
-            } else {
-                log.warn("HOST_CONNECTED gönderilemedi: adminPrincipal null! gameId={}", gameId);
             }
+            log.info("HOST_CONNECTED broadcast edildi: gameId={}", gameId);
         } catch (GameException e) {
             sendError(sessionId, e);
         }
