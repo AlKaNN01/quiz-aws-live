@@ -5,16 +5,7 @@ import { Toast, useToast } from '../components/Toast';
 import { login } from '../services/api';
 import fluffyImage from '../assets/fluffy.png';
 
-// Browser UUID — tarayıcı bazlı dedup için. localStorage'da kalıcı.
-// Her tarayıcı/cihaz kendi UUID'sine sahiptir; NAT arkasındaki kullanıcıları bloklamaz.
-function getOrCreateBrowserId() {
-  let id = localStorage.getItem('quiz_browser_id');
-  if (!id) {
-    id = 'b-' + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
-    localStorage.setItem('quiz_browser_id', id);
-  }
-  return id;
-}
+
 
 // İstemci tarafı basit profanity filtresi (backend de kontrol eder — bu sadece hızlı feedback).
 const BLOCKED = ['orospu','sik','yarrak','amk','amına','amina','ibne','pezevenk','fuck','shit','cunt','bitch','asshole','nigger','faggot'];
