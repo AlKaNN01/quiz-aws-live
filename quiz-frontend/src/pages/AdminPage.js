@@ -569,6 +569,7 @@ export default function AdminPage() {
           handleMsg(JSON.parse(m.body));
         });
         // Admin principalName'ini kaydet (HOST_CONNECTED için gerekli)
+        addLog(`admin.connect gönderiliyor | token: ${token ? token.slice(0,12)+'...' : 'BOŞ!'}`);
         client.publish({
           destination: "/app/admin.connect",
           body: JSON.stringify({ joinCode: code, adminToken: token }),

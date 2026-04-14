@@ -38,6 +38,9 @@ export default function HostPage() {
   const [scoreReveal, setScoreReveal] = useState(null);
   const [nextQuestionCountdown, setNextQuestionCountdown] = useState(0);
   const [gameFinished, setGameFinished] = useState(null);
+  const [debugLog, setDebugLog] = useState([]);
+
+  const addDebug = (msg) => setDebugLog(prev => [...prev.slice(-9), `[${new Date().toLocaleTimeString()}] ${msg}`]);
 
   const stompClient = useRef(null);
   const timerRef = useRef(null);
@@ -150,20 +153,27 @@ export default function HostPage() {
       reconnectDelay: 5000,
       onConnect: () => {
         setConnected(true);
-        client.subscribe(`/topic/game/${code}/host`, (msg) =>
-          handleMessage(JSON.parse(msg.body)),
-        );
+        addDebug(`WS bağlandı | token: ${token ? token.slice(0,12) + '...' : 'BOŞ!'}`);
+        client.subscribe(`/topic/game/${code}/host`, (msg) => {
+          addDebug(`← host topic: ${msg.body.slice(0, 80)}`);
+          handleMessage(JSON.parse(msg.body));
+        });
         client.subscribe(`/topic/game/${code}`, (msg) =>
           handleMessage(JSON.parse(msg.body)),
         );
-        // Admin'e host bağlandığını bildir
+        // Sunucudan gelen hataları yakala (token geçersizse buraya gelir)
+        client.subscribe(`/user/queue/personal`, (msg) => {
+          addDebug(`← personal: ${msg.body.slice(0, 120)}`);
+        });
+        addDebug(`host.connect gönderiliyor → kod: ${code}`);
         client.publish({
           destination: "/app/host.connect",
           body: JSON.stringify({ joinCode: code, adminToken: token }),
         });
         setScreen(STATES.WAITING);
       },
-      onDisconnect: () => setConnected(false),
+      onDisconnect: () => { setConnected(false); addDebug('WS kesildi'); },
+      onStompError: (f) => addDebug(`STOMP HATA: ${f.headers?.message || JSON.stringify(f.headers)}`),
     });
     client.activate();
     stompClient.current = client;
@@ -270,6 +280,17 @@ export default function HostPage() {
           </HostSubtle>
 
           <HostCode>{gameId}</HostCode>
+
+          {/* DEBUG PANEL — sorun çözülünce kaldır */}
+          {debugLog.length > 0 && (
+            <div style={{
+              margin: '18px auto 0', maxWidth: 700, background: 'rgba(0,0,0,0.75)',
+              borderRadius: 10, padding: '10px 14px', fontFamily: 'monospace',
+              fontSize: 12, color: '#0f0', textAlign: 'left',
+            }}>
+              {debugLog.map((l, i) => <div key={i}>{l}</div>)}
+            </div>
+          )}
 
           <div
             style={{ marginTop: 26, display: "flex", justifyContent: "center" }}

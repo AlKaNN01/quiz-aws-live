@@ -184,11 +184,14 @@ public class AdminController {
             gameStateService.saveState(state);
 
             String adminPrincipal = gameStateService.getAdminPrincipal(gameId);
+            log.info("Host bağlandı: gameId={} adminPrincipal={}", gameId, adminPrincipal);
             if (adminPrincipal != null) {
                 gameEventPublisher.sendToAdmin(adminPrincipal,
                         Map.of("type", "HOST_CONNECTED", "gameId", gameId));
+                log.info("HOST_CONNECTED gönderildi: gameId={} principal={}", gameId, adminPrincipal);
+            } else {
+                log.warn("HOST_CONNECTED gönderilemedi: adminPrincipal null! gameId={}", gameId);
             }
-            log.info("Host bağlandı: gameId={}", gameId);
         } catch (GameException e) {
             sendError(sessionId, e);
         }
