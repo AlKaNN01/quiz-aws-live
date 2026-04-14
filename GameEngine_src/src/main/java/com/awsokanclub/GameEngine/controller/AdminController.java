@@ -65,6 +65,21 @@ public class AdminController {
             gameStateService.setAdminPrincipal(gameId, principalName);
             log.info("Admin bağlandı: gameId={} principal={}", gameId, principalName);
 
+            // GameState yoksa oluştur — host.connect geldiğinde null bulmasın
+            GameState existing = gameStateService.getState(gameId);
+            if (existing == null) {
+                GameState fresh = new GameState();
+                fresh.setGameId(gameId);
+                fresh.setStatus(GameState.Status.WAITING);
+                fresh.setCurrentQuestionId("");
+                fresh.setCurrentQuestionIndex(0);
+                fresh.setTotalQuestions(0);
+                fresh.setQuestionStartedAt(0);
+                fresh.setTimerSeconds(20);
+                gameStateService.saveState(fresh);
+                log.info("GameState oluşturuldu: gameId={}", gameId);
+            }
+
             // ── Hydration: devam eden oyunda reconnect ──
             sendHydration(gameId, principalName);
 
@@ -388,6 +403,7 @@ public class AdminController {
     }
 
     private void sendError(String sessionId, GameException e) {
+        log.warn("AdminController hata: sessionId={} code={} msg={}", sessionId, e.getErrorCode(), e.getMessage());
         gameEventPublisher.sendToUser(sessionId, ErrorMessage.builder()
                 .errorCode(e.getErrorCode())
                 .message(e.getMessage())
