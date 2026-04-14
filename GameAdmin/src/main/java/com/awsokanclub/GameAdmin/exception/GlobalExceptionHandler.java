@@ -126,7 +126,7 @@ public class GlobalExceptionHandler {
         ApiResponse<?> response = ApiResponse.error(
                 ErrorCode.INTERNAL_ERROR.getCode(),
                 ErrorCode.INTERNAL_ERROR.getMessage(),
-                ex.getClass().getSimpleName() + ": " + ex.getMessage()
+                null
         );
         response.setRequestId(requestId);
 

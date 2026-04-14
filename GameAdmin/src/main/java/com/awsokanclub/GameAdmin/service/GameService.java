@@ -115,11 +115,12 @@ public class GameService {
     }
 
     // GameEngine'in soru listesi cekmesi icin kullanilir.
-    // Sadece ACTIVE oturumlara ait sorulari dondurur — eski/stale kodlar reddedilir.
+    // joinCode ile eslesen aktif oturumlara ait sorulari dondurur — eski/stale kodlar reddedilir.
+    // Not: startSession quiz statusunu degistirmiyor (PUBLISHED kalir), sadece joinCode set ediyor.
     public List<QuestionResponse> getQuestionsForEngine(String sessionCode) {
         Game game = gameRepository.findByJoinCode(sessionCode)
                 .orElseThrow(() -> GameAdminException.notFound("Gecerli oturum bulunamadi."));
-        if (game.getStatus() != Game.Status.ACTIVE) {
+        if (game.getStatus() != Game.Status.PUBLISHED && game.getStatus() != Game.Status.ACTIVE) {
             throw GameAdminException.notFound("Oturum aktif degil.");
         }
         if (game.getQuestions() == null) return List.of();

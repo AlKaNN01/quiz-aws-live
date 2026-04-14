@@ -57,9 +57,14 @@ public class RequestLoggingFilter extends OncePerRequestFilter {
             // Log response
             long duration = System.currentTimeMillis() - startTime;
             int statusCode = response.getStatus();
-            String statusLevel = statusCode < 400 ? "INFO" : statusCode < 500 ? "WARN" : "ERROR";
-            
-            log.info("<<< [{}] {} {} - {} ms", requestId, statusCode, path, duration);
+
+            if (statusCode >= 500) {
+                log.error("<<< [{}] {} {} - {} ms", requestId, statusCode, path, duration);
+            } else if (statusCode >= 400) {
+                log.warn("<<< [{}] {} {} - {} ms", requestId, statusCode, path, duration);
+            } else {
+                log.info("<<< [{}] {} {} - {} ms", requestId, statusCode, path, duration);
+            }
             
         } catch (Exception e) {
             long duration = System.currentTimeMillis() - startTime;

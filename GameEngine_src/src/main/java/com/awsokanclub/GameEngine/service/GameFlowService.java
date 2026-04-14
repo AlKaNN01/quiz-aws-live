@@ -309,7 +309,12 @@ public class GameFlowService {
         // Sonuçları kaydet, Redis'i temizle, GameAdmin'e oturum sonu bildir
         saveResultsToGameAdmin(gameId);
         cleanupGameRedis(gameId, sessions);
-        gameAdminClient.endSession(gameId);
+        try {
+            gameAdminClient.endSession(gameId);
+        } catch (Exception e) {
+            // Oyun zaten bitti; bildirim başarısız olsa da akışı kesmiyoruz.
+            log.warn("GameAdmin oturum sonu bildirimi basarisiz: gameId={} hata={}", gameId, e.getMessage());
+        }
 
         // Memory leak fix: oyuna ait puan geçmişini RAM'den temizle.
         // 300 kişi × 20 soru = 6000 kayıt. Temizlenmezse arka arkaya oyunlarda RAM şişer.
