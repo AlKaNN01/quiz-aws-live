@@ -57,7 +57,34 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * 2. Validation Errors
+     * 2. GameAdmin Domain Errors (404, 400, 401 vb.)
+     */
+    @ExceptionHandler(GameAdminException.class)
+    public ResponseEntity<ApiResponse<?>> handleGameAdminException(
+            GameAdminException ex,
+            HttpServletRequest request) {
+
+        String requestId = getRequestId();
+        if (ex.getStatus().is4xxClientError()) {
+            log.warn("GAME_ADMIN ERROR [{}] {} {} - {} {}",
+                    requestId, request.getMethod(), request.getRequestURI(), ex.getStatus().value(), ex.getMessage());
+        } else {
+            log.error("GAME_ADMIN ERROR [{}] {} {} - {} {}",
+                    requestId, request.getMethod(), request.getRequestURI(), ex.getStatus().value(), ex.getMessage(), ex);
+        }
+
+        ApiResponse<?> response = ApiResponse.error(
+                String.valueOf(ex.getStatus().value()),
+                ex.getMessage(),
+                null
+        );
+        response.setRequestId(requestId);
+
+        return ResponseEntity.status(ex.getStatus()).body(response);
+    }
+
+    /**
+     * 3. Validation Errors
      */
     @ExceptionHandler(MethodArgumentNotValidException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
