@@ -3,7 +3,7 @@
  * Token localStorage'dan okunur, joinCode girişi bu sayfada yapılır.
  */
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import SockJS from "sockjs-client";
 import { Client } from "@stomp/stompjs";
 
@@ -24,10 +24,12 @@ const STATES = {
 
 export default function HostPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const token = sessionStorage.getItem("token") || "";
 
+  const autoCode = (searchParams.get("joinCode") || "").toUpperCase();
   const [screen, setScreen] = useState(STATES.SETUP);
-  const [gameId, setGameId] = useState("");
+  const [gameId, setGameId] = useState(autoCode);
   const [connected, setConnected] = useState(false);
   const [playerCount, setPlayerCount] = useState(0);
   const [countdown, setCountdown] = useState(5);
@@ -143,8 +145,19 @@ export default function HostPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const connect = () => {
-    const code = gameId.trim().toUpperCase();
+  // URL'de joinCode varsa sayfa yüklenince otomatik bağlan — SETUP ekranı gösterilmez
+  const autoConnectedRef = useRef(false);
+  useEffect(() => {
+    if (autoCode && !autoConnectedRef.current) {
+      autoConnectedRef.current = true;
+      connectWithCode(autoCode);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const connect = () => connectWithCode(gameId.trim().toUpperCase());
+
+  function connectWithCode(code) {
     if (!code) return;
     const sockJsUrl = WS_URL.replace(/^wss?:/, (m) => m === 'ws:' ? 'http:' : 'https:');
     const client = new Client({
@@ -172,7 +185,7 @@ export default function HostPage() {
     });
     client.activate();
     stompClient.current = client;
-  };
+  }
 
   useEffect(
     () => () => {

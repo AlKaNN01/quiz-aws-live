@@ -1509,9 +1509,28 @@ export default function AdminPage() {
                     {joinCode}
                   </p>
                 </div>
-                <p style={{ fontSize: 13, color: "#888", textAlign: "center" }}>
-                  Host ekranında bu kodu girerek bağlanın.
-                </p>
+                <div style={{ textAlign: "center", marginTop: 4 }}>
+                  <a
+                    href={`/host?joinCode=${joinCode}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      display: "inline-block",
+                      padding: "10px 20px",
+                      background: "#FF9900",
+                      color: "#fff",
+                      borderRadius: 8,
+                      fontWeight: 700,
+                      fontSize: 14,
+                      textDecoration: "none",
+                    }}
+                  >
+                    🖥️ Host Ekranını Aç
+                  </a>
+                  <p style={{ margin: "8px 0 0", fontSize: 12, color: "#aaa" }}>
+                    Yeni sekmede açılır, giriş gerekir.
+                  </p>
+                </div>
                 <div style={{ marginTop: 16 }}>
                   <Btn onClick={resetGame} color="#888">
                     ← Geri Dön

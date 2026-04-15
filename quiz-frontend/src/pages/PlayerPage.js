@@ -84,6 +84,7 @@ export default function PlayerPage() {
               sessionId: msg.sessionId,
               userId: msg.userId,
               gameId: msg.gameId,
+              nickname: msg.nickname,
             });
             setPlayerCount(msg.playerCount);
             setLobbyWaiting(false);
@@ -217,6 +218,9 @@ export default function PlayerPage() {
           if (msg.success) {
             if (msg.serverTime) clockOffsetRef.current = msg.serverTime - Date.now();
             setError(null);
+            // gameStatus'a göre doğru ekrana geç
+            if (msg.gameStatus === "WAITING") setScreen(STATES.WAITING);
+            // Diğer durumlar (QUESTION_ACTIVE vb.) ilgili broadcast event'lerle zaten güncellenir
           } else {
             // Session geçersiz — yeni oyun başlamış olabilir. localStorage temizle, anasayfaya yönlendir.
             localStorage.removeItem("quiz_session_" + gameId);
@@ -271,9 +275,9 @@ export default function PlayerPage() {
         );
 
         // Önce in-memory ref'e bak (kısa WS kopması), sonra localStorage'a bak (sayfa reload).
-        // İkisi de varsa game.reconnect gönder — GAME_ALREADY_STARTED hatası almayız.
-        const savedSession =
-          sessionRef.current ||
+        // Nickname eşleşmiyorsa (farklı kişi aynı tarayıcıdan) savedSession yok say —
+        // localStorage temizle ve yeni join yap.
+        const rawSaved = sessionRef.current ||
           (() => {
             try {
               return JSON.parse(localStorage.getItem("quiz_session_" + gameId));
@@ -281,6 +285,16 @@ export default function PlayerPage() {
               return null;
             }
           })();
+
+        // Kaydedilen session bu nickname'e aitse reconnect, değilse yeni join
+        const savedSession = (rawSaved?.nickname && rawSaved.nickname !== nickname)
+          ? null
+          : rawSaved;
+
+        if (savedSession === null && rawSaved !== null) {
+          // Farklı nickname — eski session localStorage'dan temizle
+          localStorage.removeItem("quiz_session_" + gameId);
+        }
 
         if (savedSession?.sessionId) {
           if (!sessionRef.current) {

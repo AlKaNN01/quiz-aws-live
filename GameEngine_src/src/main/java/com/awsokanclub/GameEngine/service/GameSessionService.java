@@ -43,7 +43,11 @@ public class GameSessionService {
                                           String ipAddress, String principalName,
                                           String browserId) {
         try {
-            String dedupKey = (browserId != null && !browserId.isBlank()) ? browserId : principalName;
+            // Dedup key'e nickname dahil ediliyor — aynı tarayıcıdan farklı nickname ile
+            // katılım mümkün (sekme bazlı çoklu oyuncu). Aynı tarayıcı + aynı nickname
+            // ise mevcut session döner (SockJS retry / reload koruması).
+            String baseKey = (browserId != null && !browserId.isBlank()) ? browserId : principalName;
+            String dedupKey = baseKey + ":" + nickname;
 
             Object existingSessionId = redisTemplate.opsForHash().get("game:" + gameId + ":browser_sessions", dedupKey);
             if (existingSessionId != null) {
@@ -162,9 +166,9 @@ public class GameSessionService {
             redisTemplate.opsForSet().remove("game:" + gameId + ":players", sessionId);
             redisTemplate.opsForSet().remove("game:" + gameId + ":nicknames", nickname);
 
-            // browserId varsa hash'ten explicit olarak sil
+            // browser_sessions hash'ten dedupKey ile sil (browserId:nickname formatı)
             if (browserId != null && !browserId.isBlank()) {
-                redisTemplate.opsForHash().delete("game:" + gameId + ":browser_sessions", browserId);
+                redisTemplate.opsForHash().delete("game:" + gameId + ":browser_sessions", browserId + ":" + nickname);
             }
         } catch (Exception e) {
             log.error("Redis hatasi - session silinemedi: sessionId={} gameId={} hata={}", sessionId, gameId, e.getMessage());
