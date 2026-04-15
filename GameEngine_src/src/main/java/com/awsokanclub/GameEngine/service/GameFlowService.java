@@ -99,7 +99,7 @@ public class GameFlowService {
         questionTimers.put(gameId + ":question", future);
 
         // ── Server-side timer tick ──
-        // Frontend saat senkronizasyonu için 200ms'de bir tick gönder
+        // Frontend saat senkronizasyonu için 1s'de bir tick gönder (clock offset güncel kalır)
         ScheduledFuture<?> tickFuture = taskScheduler.scheduleAtFixedRate(() -> {
             GameState tickState = gameStateService.getState(gameId);
             if (tickState != null && tickState.getStatus() == GameState.Status.QUESTION_ACTIVE) {
@@ -115,7 +115,7 @@ public class GameFlowService {
                 gameEventPublisher.broadcastToGame(gameId, tick);
                 gameEventPublisher.broadcastToHost(gameId, tick);
             }
-        }, Instant.now(), Duration.ofMillis(200));
+        }, Instant.now(), Duration.ofMillis(1000));
         tickTimers.put(gameId + ":tick", tickFuture);
 
         log.info("Soru başladı: gameId={} index={} timer={}sn", gameId, questionIndex, state.getTimerSeconds());

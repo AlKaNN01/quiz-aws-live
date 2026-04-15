@@ -20,6 +20,7 @@ public class JoinAck {
     private String nickname;
     private String gameId;
     private int playerCount;
+    private long serverTime; // Client clock offset hesabı için — System.currentTimeMillis()
     // Hata durumunda dolar:
     private String errorCode;
     private String message;

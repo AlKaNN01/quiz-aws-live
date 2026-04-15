@@ -38,14 +38,12 @@ export default function HostPage() {
   const [scoreReveal, setScoreReveal] = useState(null);
   const [nextQuestionCountdown, setNextQuestionCountdown] = useState(0);
   const [gameFinished, setGameFinished] = useState(null);
-  const [debugLog, setDebugLog] = useState([]);
-
-  const addDebug = (msg) => setDebugLog(prev => [...prev.slice(-9), `[${new Date().toLocaleTimeString()}] ${msg}`]);
 
   const stompClient = useRef(null);
   const timerRef = useRef(null);
   const nextQRef = useRef(null);
   const countdownRef = useRef(null);
+  const clockOffsetRef = useRef(0);
 
   useEffect(() => {
     if (!token) navigate("/");
@@ -62,14 +60,14 @@ export default function HostPage() {
         countdownRef.current = setInterval(() => {
           const left = Math.max(
             0,
-            Math.ceil((msg.firstQuestionAt - Date.now()) / 1000),
+            Math.ceil((msg.firstQuestionAt - (Date.now() + clockOffsetRef.current)) / 1000),
           );
           setCountdown(left);
           if (left === 0) clearInterval(countdownRef.current);
         }, 200);
         break;
       case "GAME_TICK":
-        // Server-side timer tick — client sadece göster
+        if (msg.timestamp) clockOffsetRef.current = msg.timestamp - Date.now();
         if (screen === STATES.QUESTION) {
           setTimeLeft(msg.secondsRemaining);
         }
@@ -91,9 +89,10 @@ export default function HostPage() {
         setTimeLeft(msg.timerSeconds);
         // Client-side fallback timer (network latency için) — ama GAME_TICK varsa o kullanılır
         timerRef.current = setInterval(() => {
+          const now = Date.now() + clockOffsetRef.current;
           const left = Math.max(
             0,
-            msg.timerSeconds - Math.floor((Date.now() - msg.startedAt) / 1000),
+            msg.timerSeconds - Math.floor((now - msg.startedAt) / 1000),
           );
           setTimeLeft(left);
           if (left === 0) clearInterval(timerRef.current);
@@ -123,7 +122,7 @@ export default function HostPage() {
           nextQRef.current = setInterval(() => {
             const left = Math.max(
               0,
-              Math.ceil((msg.nextQuestionAt - Date.now()) / 1000),
+              Math.ceil((msg.nextQuestionAt - (Date.now() + clockOffsetRef.current)) / 1000),
             );
             setNextQuestionCountdown(left);
             if (left === 0) clearInterval(nextQRef.current);
@@ -153,32 +152,23 @@ export default function HostPage() {
       reconnectDelay: 5000,
       onConnect: () => {
         setConnected(true);
-        addDebug(`WS bağlandı | token: ${token ? token.slice(0,12) + '...' : 'BOŞ!'}`);
-        client.subscribe(`/topic/game/${code}/host`, (msg) => {
-          addDebug(`← host topic: ${msg.body.slice(0, 80)}`);
-          handleMessage(JSON.parse(msg.body));
-        });
+        client.subscribe(`/topic/game/${code}/host`, (msg) =>
+          handleMessage(JSON.parse(msg.body)),
+        );
         client.subscribe(`/topic/game/${code}`, (msg) =>
           handleMessage(JSON.parse(msg.body)),
         );
-        // Sunucudan gelen hataları yakala (token geçersizse buraya gelir)
         client.subscribe(`/user/queue/personal`, (msg) => {
-          try {
-            const parsed = JSON.parse(msg.body);
-            addDebug(`← personal: type=${parsed.type} code=${parsed.errorCode || '-'} msg=${String(parsed.message || '').slice(0, 60)}`);
-          } catch {
-            addDebug(`← personal: ${String(msg.body || '').slice(0, 120)}`);
-          }
+          try { handleMessage(JSON.parse(msg.body)); } catch { /* ignore */ }
         });
-        addDebug(`host.connect gönderiliyor → kod: ${code}`);
         client.publish({
           destination: "/app/host.connect",
           body: JSON.stringify({ joinCode: code, adminToken: token }),
         });
         setScreen(STATES.WAITING);
       },
-      onDisconnect: () => { setConnected(false); addDebug('WS kesildi'); },
-      onStompError: (f) => addDebug(`STOMP HATA: ${f.headers?.message || JSON.stringify(f.headers)}`),
+      onDisconnect: () => { setConnected(false); },
+      onStompError: () => {},
     });
     client.activate();
     stompClient.current = client;
@@ -285,17 +275,6 @@ export default function HostPage() {
           </HostSubtle>
 
           <HostCode>{gameId}</HostCode>
-
-          {/* DEBUG PANEL — sorun çözülünce kaldır */}
-          {debugLog.length > 0 && (
-            <div style={{
-              margin: '18px auto 0', maxWidth: 700, background: 'rgba(0,0,0,0.75)',
-              borderRadius: 10, padding: '10px 14px', fontFamily: 'monospace',
-              fontSize: 12, color: '#0f0', textAlign: 'left',
-            }}>
-              {debugLog.map((l, i) => <div key={i}>{l}</div>)}
-            </div>
-          )}
 
           <div
             style={{ marginTop: 26, display: "flex", justifyContent: "center" }}

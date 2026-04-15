@@ -45,11 +45,16 @@ export default function PlayerPage() {
   const [gameFinished, setGameFinished] = useState(null);
   const [banReason, setBanReason] = useState("");
   const [error, setError] = useState(null);
+  const [fatalError, setFatalError] = useState(null);
+  const [lobbyWaiting, setLobbyWaiting] = useState(false);
   const [streak, setStreak] = useState(0);
 
   const stompRef = useRef(null);
   const sessionRef = useRef(null);
   const screenRef = useRef(STATES.CONNECTING);
+  // Server saatiyle client saati arasındaki fark (ms).
+  // now() = Date.now() + clockOffsetRef.current → sunucu saatine göre düzeltilmiş zaman.
+  const clockOffsetRef = useRef(0);
   const timerRef = useRef(null);
   const nextQRef = useRef(null);
   const countdownRef = useRef(null);
@@ -74,12 +79,14 @@ export default function PlayerPage() {
       switch (msg.type) {
         case "JOIN_ACK":
           if (msg.success) {
+            if (msg.serverTime) clockOffsetRef.current = msg.serverTime - Date.now();
             setSession({
               sessionId: msg.sessionId,
               userId: msg.userId,
               gameId: msg.gameId,
             });
             setPlayerCount(msg.playerCount);
+            setLobbyWaiting(false);
             setScreen(STATES.WAITING);
           } else {
             setError(msg.message || "Katilim basarisiz");
@@ -120,7 +127,8 @@ export default function PlayerPage() {
           answerSubmittedRef.current = false;
           setTimeLeft(msg.timerSeconds);
           timerRef.current = setInterval(() => {
-            const elapsed = Math.floor((Date.now() - msg.startedAt) / 1000);
+            const now = Date.now() + clockOffsetRef.current;
+            const elapsed = Math.floor((now - msg.startedAt) / 1000);
             const left = Math.max(0, msg.timerSeconds - elapsed);
             setTimeLeft(left);
             if (left === 0) clearInterval(timerRef.current);
@@ -129,7 +137,8 @@ export default function PlayerPage() {
           break;
 
         case "GAME_TICK":
-          // Server-side timer tick — client sadece göster
+          // Her tick'te clock offset güncelle — sunucu saatiyle senkron kalır
+          if (msg.timestamp) clockOffsetRef.current = msg.timestamp - Date.now();
           if (screenRef.current === STATES.QUESTION) {
             setTimeLeft(msg.secondsRemaining);
           }
@@ -206,6 +215,7 @@ export default function PlayerPage() {
 
         case "RECONNECT_ACK":
           if (msg.success) {
+            if (msg.serverTime) clockOffsetRef.current = msg.serverTime - Date.now();
             setError(null);
           } else {
             // Session geçersiz — yeni oyun başlamış olabilir. localStorage temizle, anasayfaya yönlendir.
@@ -217,15 +227,16 @@ export default function PlayerPage() {
           break;
 
         case "ERROR":
-          setError(msg.message);
           if (msg.errorCode === "LOBBY_NOT_OPEN" || msg.errorCode === "HOST_NOT_CONNECTED") {
-            // Lobi açılmamış — bekle, navigate etme
+            // Lobi açılmamış — bekle, navigate etme, mesajı güncelle
             lobbyWaitingRef.current = true;
+            setLobbyWaiting(true);
+            setError(msg.message);
           } else {
-            // Fatal error: retry'ı durdur ve anasayfaya yönlendir
+            // Fatal error: retry'ı durdur, hata ekranı göster (navigate etme — kullanıcı mesajı göremez)
             lobbyWaitingRef.current = false;
             clearInterval(retryJoinRef.current);
-            navigate("/");
+            setFatalError(msg.message || "Bilinmeyen bir hata oluştu.");
           }
           break;
 
@@ -365,7 +376,7 @@ export default function PlayerPage() {
     if (!question || answerSubmittedRef.current || !sess) return;
     answerSubmittedRef.current = true;
 
-    const reactionTimeMs = Date.now() - question.startedAt;
+    const reactionTimeMs = (Date.now() + clockOffsetRef.current) - question.startedAt;
     setSelectedAnswer(answer);
 
     stompRef.current?.publish({
@@ -401,7 +412,49 @@ export default function PlayerPage() {
     );
   }
 
+  if (fatalError) {
+    return (
+      <PlayerShell>
+        <FocusCard accent="rgba(255, 107, 107, 0.45)">
+          <CenterStack>
+            <StatusCloud tone="danger" image={sadFluffyImage} />
+            <Eyebrow>Giriş başarısız</Eyebrow>
+            <HeroTitle>Oyuna girilemiyor</HeroTitle>
+            <BodyText narrow>{fatalError}</BodyText>
+            <div style={{ marginTop: 24 }}>
+              <PrimaryButton
+                onClick={() => navigate("/")}
+                color="linear-gradient(135deg, #ff8d8d 0%, #ff5d73 100%)"
+              >
+                Geri dön
+              </PrimaryButton>
+            </div>
+          </CenterStack>
+        </FocusCard>
+      </PlayerShell>
+    );
+  }
+
   if (screen === STATES.CONNECTING) {
+    if (lobbyWaiting) {
+      return (
+        <PlayerShell>
+          <FocusCard accent="rgba(255, 180, 67, 0.35)">
+            <CenterStack>
+              <StatusCloud tone="normal" />
+              <Eyebrow>Bekliyor</Eyebrow>
+              <HeroTitle>Lobi açılıyor</HeroTitle>
+              <BodyText narrow>
+                Host lobiye izin verdiğinde otomatik olarak gireceksin.
+              </BodyText>
+              {error && <InlineError style={{ marginTop: 14 }}>{error}</InlineError>}
+              <TinyMeta>Her birkaç saniyede bir yeniden deneniyor...</TinyMeta>
+            </CenterStack>
+          </FocusCard>
+        </PlayerShell>
+      );
+    }
+
     return (
       <PlayerShell>
         <FocusCard>

@@ -104,6 +104,7 @@ public class GameController {
                     .nickname(session.getNickname())
                     .gameId(session.getGameId())
                     .playerCount(playerCount)
+                    .serverTime(System.currentTimeMillis())
                     .build());
 
             gameEventPublisher.broadcastToLobby(request.getGameId(),
@@ -227,6 +228,7 @@ public class GameController {
                     .sessionId(session.getSessionId())
                     .totalScore(totalScore)
                     .gameStatus(state != null ? state.getStatus().name() : "UNKNOWN")
+                    .serverTime(System.currentTimeMillis())
                     .build());
 
             log.info("Oyuncu yeniden bağlandı: {}", session.getNickname());

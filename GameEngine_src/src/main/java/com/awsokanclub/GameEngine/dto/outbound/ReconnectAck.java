@@ -18,5 +18,6 @@ public class ReconnectAck {
     private String sessionId;
     private int totalScore;
     private String gameStatus;
+    private long serverTime; // Client clock offset hesabı için — System.currentTimeMillis()
     private Map<String, Object> currentQuestion;
 }
