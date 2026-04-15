@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import Background from '../components/Background';
 import { Toast, useToast } from '../components/Toast';
 import { login } from '../services/api';
@@ -16,10 +16,17 @@ function isProfane(text) {
 
 export default function LandingPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast, show } = useToast();
 
   const [joinCode, setJoinCode] = useState('');
+  // Eğer PlayerPage'den NICKNAME_TAKEN ile dönüldüyse alınan nickname'i önceden doldur
   const [nickname, setNickname] = useState('');
+  const [nicknameError, setNicknameError] = useState(
+    location.state?.nicknameTaken
+      ? `"${location.state.nicknameTaken}" zaten lobide var. Farklı bir nickname dene.`
+      : ''
+  );
   const [adminUser, setAdminUser] = useState('');
   const [adminPass, setAdminPass] = useState('');
   const [hostUser, setHostUser] = useState('');
@@ -33,6 +40,7 @@ export default function LandingPage() {
     if (!nick) return show('Nickname gir.');
     if (nick.length < 2) return show('Nickname en az 2 karakter olmalı.');
     if (isProfane(nick)) return show('Bu nickname uygun değil, lütfen başka bir isim dene.');
+    setNicknameError('');
     navigate(`/player?joinCode=${code}&nickname=${encodeURIComponent(nick)}`);
   }
 
@@ -74,11 +82,25 @@ export default function LandingPage() {
           />
           <Field
             value={nickname}
-            onChange={e => setNickname(e.target.value)}
+            onChange={e => { setNickname(e.target.value); setNicknameError(''); }}
             placeholder="Nickname"
             maxLength={20}
             onKeyDown={e => e.key === 'Enter' && joinGame()}
           />
+          {nicknameError && (
+            <div style={{
+              padding: '10px 13px',
+              borderRadius: 12,
+              background: 'rgba(255,107,107,0.15)',
+              border: '1px solid rgba(255,107,107,0.30)',
+              color: '#ffcdd2',
+              fontSize: 13,
+              fontWeight: 700,
+              lineHeight: 1.4,
+            }}>
+              ⚠ {nicknameError}
+            </div>
+          )}
         </>
       ),
       cta: loading === 'PLAYER' ? 'Bekleniyor...' : 'Oyuna Katil',

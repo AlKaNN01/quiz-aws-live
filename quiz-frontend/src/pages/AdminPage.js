@@ -248,6 +248,9 @@ export default function AdminPage() {
   const stompRef = useRef(null);
   const autoRef = useRef(null);
   const nextQRef = useRef(null);
+  const screenRef = useRef(S.SETUP);
+
+  useEffect(() => { screenRef.current = screen; }, [screen]);
 
   useEffect(() => {
     if (!token) navigate("/");
@@ -575,6 +578,17 @@ export default function AdminPage() {
           body: JSON.stringify({ joinCode: code, adminToken: token }),
         });
         setScreen(S.WAITING_HOST);
+        // Admin ayrı host penceresi açmak yerine 500ms sonra host.connect'i kendisi gönderir.
+        // screenRef.current hâlâ WAITING_HOST ise hydration gelmedi → oyun yeni/bekleme → host.connect gönder.
+        // Hydration gelip screen değiştiyse (QUESTION_ACTIVE vb.) host.connect gönderme.
+        setTimeout(() => {
+          if (client.connected && screenRef.current === S.WAITING_HOST) {
+            client.publish({
+              destination: "/app/host.connect",
+              body: JSON.stringify({ joinCode: code, adminToken: token }),
+            });
+          }
+        }, 500);
       },
       onDisconnect: () => {
         setConnected(false);
@@ -1510,26 +1524,16 @@ export default function AdminPage() {
                   </p>
                 </div>
                 <div style={{ textAlign: "center", marginTop: 4 }}>
-                  <a
-                    href={`/host?joinCode=${joinCode}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{
-                      display: "inline-block",
-                      padding: "10px 20px",
-                      background: "#FF9900",
-                      color: "#fff",
-                      borderRadius: 8,
-                      fontWeight: 700,
-                      fontSize: 14,
-                      textDecoration: "none",
-                    }}
-                  >
-                    🖥️ Host Ekranını Aç
-                  </a>
-                  <p style={{ margin: "8px 0 0", fontSize: 12, color: "#aaa" }}>
-                    Yeni sekmede açılır, giriş gerekir.
-                  </p>
+                  <div style={{
+                    padding: "12px 20px",
+                    background: "#f5f0ff",
+                    borderRadius: 8,
+                    fontSize: 13,
+                    color: "#7c3aed",
+                    fontWeight: 600,
+                  }}>
+                    ⏳ Host otomatik bağlanıyor...
+                  </div>
                 </div>
                 <div style={{ marginTop: 16 }}>
                   <Btn onClick={resetGame} color="#888">

@@ -43,6 +43,8 @@ export default function PlayerPage() {
   const [scoreReveal, setScoreReveal] = useState(null);
   const [nextQCountdown, setNextQCountdown] = useState(0);
   const [gameFinished, setGameFinished] = useState(null);
+  const [myFinalRank, setMyFinalRank] = useState(0);
+  const [myFinalScore, setMyFinalScore] = useState(0);
   const [banReason, setBanReason] = useState("");
   const [error, setError] = useState(null);
   const [fatalError, setFatalError] = useState(null);
@@ -170,6 +172,8 @@ export default function PlayerPage() {
           break;
 
         case "SCORE_REVEAL":
+          if (msg.myRank > 0) setMyFinalRank(msg.myRank);
+          if (msg.totalScore !== undefined) setMyFinalScore(msg.totalScore);
           setScoreReveal({
             pointsEarned: msg.pointsEarned,
             totalScore: msg.totalScore,
@@ -236,6 +240,11 @@ export default function PlayerPage() {
             lobbyWaitingRef.current = true;
             setLobbyWaiting(true);
             setError(msg.message);
+          } else if (msg.errorCode === "NICKNAME_TAKEN") {
+            // Nickname alınmış — doğrudan giriş ekranına dön, hata göster
+            lobbyWaitingRef.current = false;
+            clearInterval(retryJoinRef.current);
+            navigate("/", { state: { nicknameTaken: nickname } });
           } else {
             // Fatal error: retry'ı durdur, hata ekranı göster (navigate etme — kullanıcı mesajı göremez)
             lobbyWaitingRef.current = false;
@@ -781,13 +790,16 @@ export default function PlayerPage() {
   }
 
   if (screen === STATES.FINISHED && gameFinished) {
+    const myUserId = session?.userId;
+    const inTop5 = gameFinished.top5.some((p) => p.userId === myUserId);
+
     return (
       <PlayerShell>
         <QuestionCard>
           <CenterStack>
             <TopBadge>Final</TopBadge>
             <HeroTitle>Oyun bitti</HeroTitle>
-            <BodyText narrow>Final liderlik tablosu asagida.</BodyText>
+            <BodyText narrow>Final liderlik tablosu aşağıda.</BodyText>
           </CenterStack>
 
           <LeaderboardList style={{ marginTop: 24 }}>
@@ -796,16 +808,63 @@ export default function PlayerPage() {
                 key={`${p.userId}-${i}`}
                 style={{
                   background:
-                    i < 3 ? "rgba(255,255,255,0.16)" : "rgba(255,255,255,0.08)",
+                    p.userId === myUserId
+                      ? "rgba(255,153,0,0.22)"
+                      : i < 3
+                        ? "rgba(255,255,255,0.16)"
+                        : "rgba(255,255,255,0.08)",
+                  border: p.userId === myUserId ? "1px solid rgba(255,153,0,0.5)" : "none",
                 }}
               >
                 <LeaderboardLeft>
                   <LeaderboardRank>{MEDALS[i] || `${i + 1}.`}</LeaderboardRank>
-                  <span>{p.nickname || p.userId}</span>
+                  <span style={{ fontWeight: p.userId === myUserId ? 900 : 400 }}>
+                    {p.nickname || p.userId}
+                    {p.userId === myUserId && (
+                      <span style={{ marginLeft: 6, fontSize: 12, color: "#ffb443", fontWeight: 800 }}>
+                        (Sen)
+                      </span>
+                    )}
+                  </span>
                 </LeaderboardLeft>
                 <strong>{p.score}</strong>
               </LeaderboardRow>
             ))}
+
+            {/* Kişinin kendi sırası top 5'te değilse göster */}
+            {!inTop5 && myFinalRank > 0 && (
+              <>
+                <div style={{
+                  textAlign: "center",
+                  padding: "4px 0",
+                  color: "rgba(232,239,255,0.38)",
+                  fontSize: 18,
+                  letterSpacing: 3,
+                }}>
+                  · · ·
+                </div>
+                <LeaderboardRow
+                  style={{
+                    background: "rgba(255,153,0,0.22)",
+                    border: "1px solid rgba(255,153,0,0.5)",
+                    borderRadius: 16,
+                  }}
+                >
+                  <LeaderboardLeft>
+                    <LeaderboardRank style={{ color: "#ffb443" }}>
+                      {myFinalRank}.
+                    </LeaderboardRank>
+                    <span style={{ fontWeight: 900 }}>
+                      {session?.nickname || "Sen"}
+                      <span style={{ marginLeft: 6, fontSize: 12, color: "#ffb443", fontWeight: 800 }}>
+                        (Sen)
+                      </span>
+                    </span>
+                  </LeaderboardLeft>
+                  <strong style={{ color: "#ffb443" }}>{myFinalScore}</strong>
+                </LeaderboardRow>
+              </>
+            )}
           </LeaderboardList>
 
           <CenterStack style={{ marginTop: 24 }}>
