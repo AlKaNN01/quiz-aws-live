@@ -4,6 +4,7 @@ import SockJS from "sockjs-client";
 import { Client } from "@stomp/stompjs";
 
 import { WS_URL } from "../config";
+import { sound } from "../services/sound";
 import fluffyImage from "../assets/waiting-fluffy.png";
 import sadFluffyImage from "../assets/sad-fluffy.png";
 import happyFluffyImage from "../assets/happy-fluffy.png";
@@ -257,7 +258,7 @@ export default function PlayerPage() {
           break;
       }
     },
-    [navigate, gameId],
+    [navigate, gameId, nickname],
   );
 
   useEffect(() => {
@@ -390,8 +391,59 @@ export default function PlayerPage() {
       clearInterval(retryJoinRef.current);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       client.deactivate();
+      sound.stopBg();
     };
   }, [gameId, nickname, navigate, handleMessage]);
+
+  // ── Ses: ilk dokunuşta AudioContext başlat ─────────────────
+  useEffect(() => {
+    const init = () => sound.init();
+    document.addEventListener("click",      init, { once: true });
+    document.addEventListener("touchstart", init, { once: true });
+    return () => {
+      document.removeEventListener("click",      init);
+      document.removeEventListener("touchstart", init);
+    };
+  }, []);
+
+  // ── Ses: ekran geçişleri ────────────────────────────────────
+  useEffect(() => {
+    switch (screen) {
+      case STATES.WAITING:      sound.startLobby();    break;
+      case STATES.COUNTDOWN:    sound.stopBg();        break;
+      case STATES.QUESTION:     sound.startQuestion(); break;
+      case STATES.QUESTION_END: sound.stopBg();        break;
+      case STATES.FINISHED:     sound.victory();       break;
+      default: break;
+    }
+  }, [screen]);
+
+  // ── Ses: geri sayım bipleri ─────────────────────────────────
+  const soundCdRef = useRef(-1);
+  useEffect(() => {
+    if (screen !== STATES.COUNTDOWN) return;
+    if (countdown === soundCdRef.current) return;
+    soundCdRef.current = countdown;
+    sound.countdown(countdown);
+  }, [countdown, screen]);
+
+  // ── Ses: son 5 saniye tik ──────────────────────────────────
+  const soundTickRef = useRef(-1);
+  useEffect(() => {
+    if (screen !== STATES.QUESTION) return;
+    if (timeLeft > 5 || timeLeft <= 0) return;
+    if (timeLeft === soundTickRef.current) return;
+    soundTickRef.current = timeLeft;
+    sound.tick(timeLeft);
+  }, [timeLeft, screen]);
+
+  // ── Ses: cevap sonucu ──────────────────────────────────────
+  useEffect(() => {
+    if (screen === STATES.ANSWER_REVEAL && answerReveal) {
+      if (answerReveal.isCorrect) sound.correct();
+      else sound.wrong();
+    }
+  }, [screen, answerReveal]);
 
   const submitAnswer = (answer) => {
     const sess = sessionRef.current;
@@ -883,6 +935,36 @@ export default function PlayerPage() {
   return null;
 }
 
+function PlayerMuteBtn() {
+  const [muted, setMuted] = React.useState(sound.muted);
+  return (
+    <button
+      onClick={() => setMuted(sound.toggleMute())}
+      title={muted ? "Sesi aç" : "Sesi kapat"}
+      style={{
+        position: "fixed",
+        top: 12,
+        right: 12,
+        zIndex: 999,
+        width: 38,
+        height: 38,
+        borderRadius: 12,
+        background: "rgba(255,255,255,0.10)",
+        border: "1px solid rgba(255,255,255,0.18)",
+        color: "#fff",
+        fontSize: 17,
+        cursor: "pointer",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        backdropFilter: "blur(8px)",
+      }}
+    >
+      {muted ? "🔇" : "🔊"}
+    </button>
+  );
+}
+
 function PlayerShell({ children }) {
   return (
     <div style={shellStyle}>
@@ -898,6 +980,7 @@ function PlayerShell({ children }) {
         <span style={starStyle("84%", "80%", 18)}>✦</span>
       </div>
 
+      <PlayerMuteBtn />
       <div style={shellContentStyle}>{children}</div>
     </div>
   );

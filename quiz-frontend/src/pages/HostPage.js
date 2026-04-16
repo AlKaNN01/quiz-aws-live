@@ -8,6 +8,8 @@ import SockJS from "sockjs-client";
 import { Client } from "@stomp/stompjs";
 
 import { WS_URL } from "../config";
+import { QRCodeSVG } from "qrcode.react";
+import { sound } from "../services/sound";
 import leaderboardImage from "../assets/leaderboard.png";
 const optionColors = { A: "#e74c3c", B: "#3498db", C: "#f39c12", D: "#2ecc71" };
 const optionBg = { A: "#c0392b", B: "#2980b9", C: "#d68910", D: "#27ae60" };
@@ -159,6 +161,7 @@ export default function HostPage() {
 
   function connectWithCode(code) {
     if (!code) return;
+    sound.init(); // AudioContext kullanıcı etkileşiminde başlatılmalı
     const sockJsUrl = WS_URL.replace(/^wss?:/, (m) => m === 'ws:' ? 'http:' : 'https:');
     const client = new Client({
       webSocketFactory: () => new SockJS(sockJsUrl),
@@ -193,9 +196,51 @@ export default function HostPage() {
       clearInterval(nextQRef.current);
       clearInterval(countdownRef.current);
       stompClient.current?.deactivate();
+      sound.stopBg();
     },
     [],
   );
+
+  // ── Ses: ekran geçişleri ────────────────────────────────────
+  useEffect(() => {
+    switch (screen) {
+      case STATES.WAITING:      sound.startLobby();    break;
+      case STATES.COUNTDOWN:    sound.stopBg();        break;
+      case STATES.QUESTION:     sound.startQuestion(); break;
+      case STATES.QUESTION_END: sound.stopBg();        break;
+      case STATES.SCORE_REVEAL: sound.scoreReveal();   break;
+      case STATES.FINISHED:     sound.victory();       break;
+      default: break;
+    }
+  }, [screen]);
+
+  // ── Ses: geri sayım bipleri ─────────────────────────────────
+  const soundCdRef = useRef(-1);
+  useEffect(() => {
+    if (screen !== STATES.COUNTDOWN) return;
+    if (countdown === soundCdRef.current) return;
+    soundCdRef.current = countdown;
+    sound.countdown(countdown);
+  }, [countdown, screen]);
+
+  // ── Ses: son 5 saniye tik ──────────────────────────────────
+  const soundTickRef = useRef(-1);
+  useEffect(() => {
+    if (screen !== STATES.QUESTION) return;
+    if (timeLeft > 5 || timeLeft <= 0) return;
+    if (timeLeft === soundTickRef.current) return;
+    soundTickRef.current = timeLeft;
+    sound.tick(timeLeft);
+  }, [timeLeft, screen]);
+
+  // ── Ses: yeni oyuncu katıldı ───────────────────────────────
+  const prevCountRef = useRef(0);
+  useEffect(() => {
+    if (screen === STATES.WAITING && playerCount > prevCountRef.current && prevCountRef.current > 0) {
+      sound.playerJoin();
+    }
+    prevCountRef.current = playerCount;
+  }, [playerCount, screen]);
 
   const full = {
     fontFamily: "monospace",
@@ -294,21 +339,26 @@ export default function HostPage() {
           >
             <div
               style={{
-                width: 168,
-                height: 168,
+                width: 180,
+                height: 180,
                 borderRadius: 28,
                 background:
-                  "linear-gradient(180deg, rgba(255,255,255,0.96), rgba(232, 238, 255, 0.9))",
+                  "linear-gradient(180deg, rgba(255,255,255,0.98), rgba(232, 238, 255, 0.94))",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                color: "#43385b",
-                fontSize: 18,
-                fontWeight: 800,
+                padding: 14,
+                boxSizing: "border-box",
                 boxShadow: "0 20px 50px rgba(7, 3, 30, 0.24)",
               }}
             >
-              QR Kod
+              <QRCodeSVG
+                value={`${window.location.origin}/?joinCode=${gameId}`}
+                size={152}
+                bgColor="transparent"
+                fgColor="#1a0840"
+                level="M"
+              />
             </div>
           </div>
 
@@ -857,6 +907,36 @@ export default function HostPage() {
   return null;
 }
 
+function MuteBtn() {
+  const [muted, setMuted] = React.useState(sound.muted);
+  return (
+    <button
+      onClick={() => setMuted(sound.toggleMute())}
+      title={muted ? "Sesi aç" : "Sesi kapat"}
+      style={{
+        position: "fixed",
+        top: 14,
+        right: 14,
+        zIndex: 999,
+        width: 44,
+        height: 44,
+        borderRadius: 14,
+        background: "rgba(255,255,255,0.10)",
+        border: "1px solid rgba(255,255,255,0.18)",
+        color: "#fff",
+        fontSize: 20,
+        cursor: "pointer",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        backdropFilter: "blur(8px)",
+      }}
+    >
+      {muted ? "🔇" : "🔊"}
+    </button>
+  );
+}
+
 function HostShell({ children, justify = "center", padTop = 24 }) {
   return (
     <div
@@ -874,6 +954,7 @@ function HostShell({ children, justify = "center", padTop = 24 }) {
         fontFamily: "monospace",
       }}
     >
+      <MuteBtn />
       {children}
     </div>
   );

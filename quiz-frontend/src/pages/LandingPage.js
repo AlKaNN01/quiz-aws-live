@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import Background from '../components/Background';
 import { Toast, useToast } from '../components/Toast';
 import { login } from '../services/api';
@@ -17,9 +17,10 @@ function isProfane(text) {
 export default function LandingPage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const { toast, show } = useToast();
 
-  const [joinCode, setJoinCode] = useState('');
+  const [joinCode, setJoinCode] = useState(() => (searchParams.get('joinCode') || '').toUpperCase());
   // Eğer PlayerPage'den NICKNAME_TAKEN ile dönüldüyse alınan nickname'i önceden doldur
   const [nickname, setNickname] = useState('');
   const [nicknameError, setNicknameError] = useState(
@@ -194,7 +195,7 @@ export default function LandingPage() {
           gap: 28,
           alignItems: 'stretch',
         }}>
-          <section style={{
+          <section className="hero-section" style={{
             position: 'relative',
             padding: '28px clamp(22px, 4vw, 44px) 36px',
             borderRadius: 36,
@@ -342,7 +343,7 @@ export default function LandingPage() {
             </div>
           </section>
 
-          <section style={{
+          <section className="role-section" style={{
             position: 'relative',
             padding: '22px',
             borderRadius: 36,
@@ -419,6 +420,11 @@ export default function LandingPage() {
         @keyframes balloonFloat {
           0%, 100% { transform: translateY(0px); }
           50% { transform: translateY(-14px); }
+        }
+
+        @media (max-width: 680px) {
+          .role-section { order: -1; }
+          .hero-section { order: 0; }
         }
       `}</style>
     </div>
