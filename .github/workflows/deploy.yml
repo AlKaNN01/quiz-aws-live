@@ -116,7 +116,7 @@ jobs:
             chmod 600 .env
             git fetch origin
             git checkout LiveBackend
-            git pull origin LiveBackend
+            git reset --hard origin/LiveBackend
             mkdir -p data/db data/redis data/certs data/logs/nginx
             docker-compose -f docker-compose-prod.yml down || true
             docker-compose -f docker-compose-prod.yml up -d --build
