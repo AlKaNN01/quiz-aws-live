@@ -26,6 +26,7 @@ public class SecurityConfig {
                         .requestMatchers("/ws/**").permitAll()
                         .requestMatchers("/app/**").permitAll()
                         .requestMatchers("/actuator/health").permitAll()
+                        .requestMatchers("/api/player/check-nickname").permitAll()
                         .requestMatchers("/actuator/**").denyAll()
                         .anyRequest().authenticated()
                 )

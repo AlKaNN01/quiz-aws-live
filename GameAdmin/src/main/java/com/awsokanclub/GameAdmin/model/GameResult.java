@@ -21,7 +21,7 @@ public class GameResult {
     private Long id;
 
     @Column(name = "game_id", nullable = false)
-    private String gameId; // joinCode
+    private Long gameId;
 
     @Column(nullable = false)
     private String userId;

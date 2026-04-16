@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import Background from '../components/Background';
 import { Toast, useToast } from '../components/Toast';
-import { login } from '../services/api';
+import { login, checkNickname } from '../services/api';
 import fluffyImage from '../assets/fluffy.png';
 
 
@@ -34,7 +34,7 @@ export default function LandingPage() {
   const [hostPass, setHostPass] = useState('');
   const [loading, setLoading] = useState('');
 
-  function joinGame() {
+  async function joinGame() {
     const code = joinCode.trim().toUpperCase();
     const nick = nickname.trim();
     if (!code) return show('Oyun kodunu gir.');
@@ -42,6 +42,18 @@ export default function LandingPage() {
     if (nick.length < 2) return show('Nickname en az 2 karakter olmalı.');
     if (isProfane(nick)) return show('Bu nickname uygun değil, lütfen başka bir isim dene.');
     setNicknameError('');
+    setLoading('PLAYER');
+    try {
+      const { taken } = await checkNickname(code, nick);
+      if (taken) {
+        setNicknameError(`"${nick}" zaten lobide var. Farklı bir nickname dene.`);
+        return;
+      }
+    } catch {
+      // API hatası — devam et, backend WS'te de kontrol eder
+    } finally {
+      setLoading('');
+    }
     navigate(`/player?joinCode=${code}&nickname=${encodeURIComponent(nick)}`);
   }
 

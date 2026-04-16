@@ -27,6 +27,13 @@ public class CorsConfig implements WebMvcConfigurer {
                 .allowCredentials(true)
                 .maxAge(3600);
 
+        registry.addMapping("/api/player/**")
+                .allowedOrigins(origins)
+                .allowedMethods("GET", "OPTIONS")
+                .allowedHeaders("*")
+                .allowCredentials(true)
+                .maxAge(3600);
+
         // STOMP WebSocket message'lar için ayrıca WebSocketConfig'te izin veriliyor
     }
 }

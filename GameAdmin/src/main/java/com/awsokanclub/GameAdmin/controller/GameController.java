@@ -81,7 +81,7 @@ public class GameController {
 
     // Admin panelinde geçmiş oyun sonuçlarını görür
     @GetMapping("/{gameId}/results")
-    public ResponseEntity<List<GameResult>> getResults(@PathVariable String gameId) {
+    public ResponseEntity<List<GameResult>> getResults(@PathVariable Long gameId) {
         return ResponseEntity.ok(gameService.getResults(gameId));
     }
 

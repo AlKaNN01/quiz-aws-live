@@ -190,10 +190,14 @@ public class GameService {
      */
 
     @Transactional
-    public void saveResults(String gameId, List<GameResultRequest> results) {
-        log.info("Saving results for game: gameId={}, resultCount={}", gameId, results.size());
+    public void saveResults(String sessionCode, List<GameResultRequest> results) {
+        // sessionCode (joinCode) üzerinden gerçek game DB id'sini bul
+        Game game = gameRepository.findByJoinCode(sessionCode)
+                .orElseThrow(() -> GameAdminException.notFound("Oyun bulunamadi: " + sessionCode));
+        Long dbGameId = game.getId();
+        log.info("Saving results for game: sessionCode={} dbGameId={}, resultCount={}", sessionCode, dbGameId, results.size());
         List<GameResult> entities = results.stream().map(r -> GameResult.builder()
-                .gameId(gameId)
+                .gameId(dbGameId)
                 .userId(r.getUserId())
                 .nickname(r.getNickname())
                 .totalScore(r.getTotalScore())
@@ -201,13 +205,13 @@ public class GameService {
                 .build()
         ).toList();
         gameResultRepository.saveAll(entities);
-        log.info("Game results saved successfully: gameId={}", gameId);
+        log.info("Game results saved successfully: dbGameId={}", dbGameId);
     }
 
     /*
      * Admin panelinde geçmiş oyun sonuçlarını gösterir.
      */
-    public List<GameResult> getResults(String gameId) {
+    public List<GameResult> getResults(Long gameId) {
         return gameResultRepository.findByGameIdOrderByRankAsc(gameId);
     }
 }

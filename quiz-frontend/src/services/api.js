@@ -44,6 +44,18 @@ async function handleApiError(res, defaultMessage) {
   throw error;
 }
 
+export async function checkNickname(gameId, nickname) {
+  try {
+    const res = await fetch(
+      `${API_BASE}/api/player/check-nickname?gameId=${encodeURIComponent(gameId)}&nickname=${encodeURIComponent(nickname)}`
+    );
+    if (!res.ok) return { taken: false };
+    return res.json();
+  } catch {
+    return { taken: false };
+  }
+}
+
 export async function login(username, password) {
   try {
     const res = await fetch(`${API_BASE}/api/auth/login`, {
