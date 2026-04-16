@@ -578,17 +578,6 @@ export default function AdminPage() {
           body: JSON.stringify({ joinCode: code, adminToken: token }),
         });
         setScreen(S.WAITING_HOST);
-        // Admin ayrı host penceresi açmak yerine 500ms sonra host.connect'i kendisi gönderir.
-        // screenRef.current hâlâ WAITING_HOST ise hydration gelmedi → oyun yeni/bekleme → host.connect gönder.
-        // Hydration gelip screen değiştiyse (QUESTION_ACTIVE vb.) host.connect gönderme.
-        setTimeout(() => {
-          if (client.connected && screenRef.current === S.WAITING_HOST) {
-            client.publish({
-              destination: "/app/host.connect",
-              body: JSON.stringify({ joinCode: code, adminToken: token }),
-            });
-          }
-        }, 500);
       },
       onDisconnect: () => {
         setConnected(false);

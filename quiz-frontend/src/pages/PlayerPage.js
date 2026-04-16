@@ -603,7 +603,6 @@ export default function PlayerPage() {
             >
               <span style={{ opacity: 0.85 }}>⏱</span> {timeLeft}s
             </TimerPill>
-            <MetaPill tone="ghost">0 cevap alindi</MetaPill>
           </HeaderRow>
 
           <TimerTrack
