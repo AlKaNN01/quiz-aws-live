@@ -6,9 +6,13 @@
  *  - suspend durumunda resume için persistent document listener
  *
  * Mute davranışı:
- *  - localStorage'da 'quiz_mute' yoksa → sessiz (muted = true) [yeni oyuncular]
+ *  - localStorage'da 'quiz_mute' yoksa → sesli (muted = false) [yeni oyuncular]
  *  - localStorage'da '0' varsa → sesli
  *  - localStorage'da '1' varsa → sessiz
+ *
+ * Debug logging:
+ *  - [SND] prefix ile console.log çıkışları
+ *  - ctx state, mute durumu ve tetikleyen olay loglanır
  */
 
 const N = {
@@ -27,9 +31,10 @@ class SoundService {
     this.compressor   = null;
     this._bgStop      = null;
     this._lastBgMethod = null; // 'lobby' | 'question' | null
-    // Varsayılan: sessiz (localStorage yoksa muted=true)
+    // Varsayılan: sesli (localStorage yoksa muted=false)
     const saved = localStorage.getItem('quiz_mute');
-    this._muted = saved === null ? true : saved !== '0';
+    this._muted = saved === null ? false : saved !== '0';
+    console.log(`[SND] constructor: saved=${saved}, muted=${this._muted}`);
     this._resumeBound = null;
   }
 
@@ -38,6 +43,7 @@ class SoundService {
   toggleMute() {
     this._muted = !this._muted;
     localStorage.setItem('quiz_mute', this._muted ? '1' : '0');
+    console.log(`[SND] toggleMute: muted=${this._muted}, ctx=${!!this.ctx}, state=${this.ctx?.state}`);
     if (this.master) {
       this.master.gain.setTargetAtTime(
         this._muted ? 0 : 0.85,
@@ -62,9 +68,11 @@ class SoundService {
   init() {
     if (this.ctx) {
       // Zaten var — sadece resume et (Safari suspend eder)
+      console.log(`[SND] init: ctx zaten var, state=${this.ctx.state}, muted=${this._muted}`);
       this._resume();
       return;
     }
+    console.log(`[SND] init: AudioContext oluşturuluyor, muted=${this._muted}, lastBg=${this._lastBgMethod}`);
     try {
       this.ctx        = new (window.AudioContext || window.webkitAudioContext)();
       this.compressor = this.ctx.createDynamicsCompressor();
@@ -85,16 +93,21 @@ class SoundService {
       document.addEventListener('touchstart', this._resumeBound, { passive: true });
 
       this._resume();
+      console.log(`[SND] init: ctx oluşturuldu, state=${this.ctx.state}, muted=${this._muted}, lastBg=${this._lastBgMethod}`);
       // Yeni ctx oluşturuldu — mute değilse mevcut ekranın sesini başlat
       if (!this._muted) this.restartCurrentBg();
+      else console.log('[SND] init: muted=true olduğu için restartCurrentBg atlandı');
     } catch (e) {
-      console.warn('Web Audio API desteklenmiyor:', e);
+      console.warn('[SND] init: Web Audio API desteklenmiyor:', e);
     }
   }
 
   _resume() {
     if (this.ctx && this.ctx.state === 'suspended') {
-      this.ctx.resume().catch(() => {});
+      console.log('[SND] _resume: ctx suspended, resume çağrılıyor...');
+      this.ctx.resume()
+        .then(() => console.log(`[SND] _resume: başarılı, state=${this.ctx.state}`))
+        .catch((e) => console.warn('[SND] _resume: hata', e));
     }
   }
 
@@ -153,6 +166,7 @@ class SoundService {
   //  LOBİ MÜZİĞİ — 128 BPM, enerjik major, Kahoot tarzı
   // ─────────────────────────────────────────────────────────────
   startLobby() {
+    console.log(`[SND] startLobby: ctx=${!!this.ctx}, state=${this.ctx?.state}, muted=${this._muted}`);
     if (!this.ctx) { this._lastBgMethod = 'lobby'; return; }
     this._resume();
     this.stopBg();
@@ -216,6 +230,7 @@ class SoundService {
   //  SORU ARKAPLAN — gergin ambient, dikkat odaklar
   // ─────────────────────────────────────────────────────────────
   startQuestion() {
+    console.log(`[SND] startQuestion: ctx=${!!this.ctx}, state=${this.ctx?.state}, muted=${this._muted}`);
     if (!this.ctx) { this._lastBgMethod = 'question'; return; }
     this._resume();
     this.stopBg();
@@ -299,6 +314,7 @@ class SoundService {
   //  DOĞRU CEVAP — parlak yükselen arpej (Kahoot yeşil)
   // ─────────────────────────────────────────────────────────────
   correct() {
+    console.log(`[SND] correct: ctx=${!!this.ctx}, state=${this.ctx?.state}, muted=${this._muted}`);
     if (!this.ctx) return;
     this._resume();
     const now = this.ctx.currentTime;
@@ -318,6 +334,7 @@ class SoundService {
   //  YANLIŞ CEVAP — inen vızıltı buzzer (Kahoot kırmızı)
   // ─────────────────────────────────────────────────────────────
   wrong() {
+    console.log(`[SND] wrong: ctx=${!!this.ctx}, state=${this.ctx?.state}, muted=${this._muted}`);
     if (!this.ctx) return;
     this._resume();
     const now = this.ctx.currentTime;

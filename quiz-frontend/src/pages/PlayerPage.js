@@ -397,7 +397,10 @@ export default function PlayerPage() {
 
   // ── Ses: ilk dokunuşta AudioContext başlat ─────────────────
   useEffect(() => {
-    const init = () => sound.init();
+    const init = (e) => {
+      console.log(`[SND] ilk ${e.type} → sound.init() çağrılıyor`);
+      sound.init();
+    };
     document.addEventListener("click",      init, { once: true });
     document.addEventListener("touchstart", init, { once: true });
     return () => {
@@ -408,6 +411,7 @@ export default function PlayerPage() {
 
   // ── Ses: ekran geçişleri ────────────────────────────────────
   useEffect(() => {
+    console.log(`[SND] ekran geçişi → ${screen}`);
     switch (screen) {
       case STATES.WAITING:      sound.startLobby();    break;
       case STATES.COUNTDOWN:    sound.stopBg();        break;
@@ -424,6 +428,7 @@ export default function PlayerPage() {
     if (screen !== STATES.COUNTDOWN) return;
     if (countdown === soundCdRef.current) return;
     soundCdRef.current = countdown;
+    console.log(`[SND] countdown beep: ${countdown}`);
     sound.countdown(countdown);
   }, [countdown, screen]);
 
@@ -434,12 +439,14 @@ export default function PlayerPage() {
     if (timeLeft > 5 || timeLeft <= 0) return;
     if (timeLeft === soundTickRef.current) return;
     soundTickRef.current = timeLeft;
+    console.log(`[SND] tick: ${timeLeft}s kaldı`);
     sound.tick(timeLeft);
   }, [timeLeft, screen]);
 
   // ── Ses: cevap sonucu ──────────────────────────────────────
   useEffect(() => {
     if (screen === STATES.ANSWER_REVEAL && answerReveal) {
+      console.log(`[SND] answerReveal: isCorrect=${answerReveal.isCorrect}`);
       if (answerReveal.isCorrect) sound.correct();
       else sound.wrong();
     }
