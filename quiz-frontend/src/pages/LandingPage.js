@@ -34,14 +34,38 @@ export default function LandingPage() {
   const [hostPass, setHostPass] = useState('');
   const [loading, setLoading] = useState('');
 
+  const [joinCodeError, setJoinCodeError] = useState('');
+  const [adminUserError, setAdminUserError] = useState('');
+  const [adminPassError, setAdminPassError] = useState('');
+  const [hostUserError, setHostUserError] = useState('');
+  const [hostPassError, setHostPassError] = useState('');
+
   async function joinGame() {
     const code = joinCode.trim().toUpperCase();
     const nick = nickname.trim();
-    if (!code) return show('Oyun kodunu gir.');
-    if (!nick) return show('Nickname gir.');
-    if (nick.length < 2) return show('Nickname en az 2 karakter olmalı.');
-    if (isProfane(nick)) return show('Bu nickname uygun değil, lütfen başka bir isim dene.');
-    setNicknameError('');
+    let hasError = false;
+    if (!code) {
+      setJoinCodeError('Oyun kodu boş bırakılamaz.');
+      hasError = true;
+    } else if (code.length !== 6) {
+      setJoinCodeError('Oyun kodu tam 6 hane olmalı.');
+      hasError = true;
+    } else {
+      setJoinCodeError('');
+    }
+    if (!nick) {
+      setNicknameError('Nickname boş bırakılamaz.');
+      hasError = true;
+    } else if (nick.length < 2) {
+      setNicknameError('Nickname en az 2 karakter olmalı.');
+      hasError = true;
+    } else if (isProfane(nick)) {
+      setNicknameError('Bu nickname uygun değil, lütfen başka bir isim dene.');
+      hasError = true;
+    } else {
+      setNicknameError('');
+    }
+    if (hasError) return;
     setLoading('PLAYER');
     try {
       const { taken } = await checkNickname(code, nick);
@@ -57,9 +81,11 @@ export default function LandingPage() {
     navigate(`/player?joinCode=${code}&nickname=${encodeURIComponent(nick)}`);
   }
 
-  async function handleLogin(username, password, expectedRole, path) {
-    if (!username) return show('Kullanici adini gir.');
-    if (!password) return show('Sifreyi gir.');
+  async function handleLogin(username, password, expectedRole, path, setUserErr, setPassErr) {
+    let hasError = false;
+    if (!username) { setUserErr('Kullanıcı adı boş bırakılamaz.'); hasError = true; } else setUserErr('');
+    if (!password) { setPassErr('Şifre boş bırakılamaz.'); hasError = true; } else setPassErr('');
+    if (hasError) return;
     setLoading(expectedRole);
     try {
       const data = await login(username, password);
@@ -88,10 +114,11 @@ export default function LandingPage() {
         <>
           <Field
             value={joinCode}
-            onChange={e => setJoinCode(e.target.value.toUpperCase())}
-            placeholder="Oyun kodu"
-            maxLength={8}
+            onChange={e => { setJoinCode(e.target.value.toUpperCase()); setJoinCodeError(''); }}
+            placeholder="Oyun kodu (6 hane)"
+            maxLength={6}
             onKeyDown={e => e.key === 'Enter' && joinGame()}
+            error={joinCodeError}
           />
           <Field
             value={nickname}
@@ -99,21 +126,8 @@ export default function LandingPage() {
             placeholder="Nickname"
             maxLength={20}
             onKeyDown={e => e.key === 'Enter' && joinGame()}
+            error={nicknameError}
           />
-          {nicknameError && (
-            <div style={{
-              padding: '10px 13px',
-              borderRadius: 12,
-              background: 'rgba(255,107,107,0.15)',
-              border: '1px solid rgba(255,107,107,0.30)',
-              color: '#ffcdd2',
-              fontSize: 13,
-              fontWeight: 700,
-              lineHeight: 1.4,
-            }}>
-              ⚠ {nicknameError}
-            </div>
-          )}
         </>
       ),
       cta: loading === 'PLAYER' ? 'Bekleniyor...' : 'Oyuna Katil',
@@ -132,21 +146,23 @@ export default function LandingPage() {
         <>
           <Field
             value={adminUser}
-            onChange={e => setAdminUser(e.target.value)}
-            placeholder="Kullanici adi"
-            onKeyDown={e => e.key === 'Enter' && handleLogin(adminUser, adminPass, 'ADMIN', '/admin')}
+            onChange={e => { setAdminUser(e.target.value); setAdminUserError(''); }}
+            placeholder="Kullanıcı adı"
+            onKeyDown={e => e.key === 'Enter' && handleLogin(adminUser, adminPass, 'ADMIN', '/admin', setAdminUserError, setAdminPassError)}
+            error={adminUserError}
           />
           <Field
             value={adminPass}
-            onChange={e => setAdminPass(e.target.value)}
-            placeholder="Sifre"
+            onChange={e => { setAdminPass(e.target.value); setAdminPassError(''); }}
+            placeholder="Şifre"
             type="password"
-            onKeyDown={e => e.key === 'Enter' && handleLogin(adminUser, adminPass, 'ADMIN', '/admin')}
+            onKeyDown={e => e.key === 'Enter' && handleLogin(adminUser, adminPass, 'ADMIN', '/admin', setAdminUserError, setAdminPassError)}
+            error={adminPassError}
           />
         </>
       ),
       cta: loading === 'ADMIN' ? 'Bekleniyor...' : 'Admin Paneli',
-      onAction: () => handleLogin(adminUser, adminPass, 'ADMIN', '/admin'),
+      onAction: () => handleLogin(adminUser, adminPass, 'ADMIN', '/admin', setAdminUserError, setAdminPassError),
     },
     {
       id: 'host',
@@ -161,21 +177,23 @@ export default function LandingPage() {
         <>
           <Field
             value={hostUser}
-            onChange={e => setHostUser(e.target.value)}
-            placeholder="Kullanici adi"
-            onKeyDown={e => e.key === 'Enter' && handleLogin(hostUser, hostPass, 'HOST', '/host')}
+            onChange={e => { setHostUser(e.target.value); setHostUserError(''); }}
+            placeholder="Kullanıcı adı"
+            onKeyDown={e => e.key === 'Enter' && handleLogin(hostUser, hostPass, 'HOST', '/host', setHostUserError, setHostPassError)}
+            error={hostUserError}
           />
           <Field
             value={hostPass}
-            onChange={e => setHostPass(e.target.value)}
-            placeholder="Sifre"
+            onChange={e => { setHostPass(e.target.value); setHostPassError(''); }}
+            placeholder="Şifre"
             type="password"
-            onKeyDown={e => e.key === 'Enter' && handleLogin(hostUser, hostPass, 'HOST', '/host')}
+            onKeyDown={e => e.key === 'Enter' && handleLogin(hostUser, hostPass, 'HOST', '/host', setHostUserError, setHostPassError)}
+            error={hostPassError}
           />
         </>
       ),
-      cta: loading === 'HOST' ? 'Bekleniyor...' : 'Host Ekrani',
-      onAction: () => handleLogin(hostUser, hostPass, 'HOST', '/host'),
+      cta: loading === 'HOST' ? 'Bekleniyor...' : 'Host Ekranı',
+      onAction: () => handleLogin(hostUser, hostPass, 'HOST', '/host', setHostUserError, setHostPassError),
     },
   ];
 
@@ -531,6 +549,7 @@ function AccessCard({ card, delay }) {
           textTransform: 'uppercase',
           background: card.button,
           boxShadow: `0 16px 34px ${card.glow}`,
+          cursor: 'pointer',
         }}
       >
         {card.cta}
@@ -539,30 +558,53 @@ function AccessCard({ card, delay }) {
   );
 }
 
-function Field(props) {
+function Field({ error, ...props }) {
   const [focused, setFocused] = useState(false);
+  const hasError = !!error;
 
   return (
-    <input
-      {...props}
-      onFocus={() => setFocused(true)}
-      onBlur={() => setFocused(false)}
-      style={{
-        width: '100%',
-        padding: '13px 15px',
-        borderRadius: 15,
-        border: `1px solid ${focused ? 'rgba(255,255,255,0.34)' : 'rgba(255,255,255,0.12)'}`,
-        background: focused ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.07)',
-        color: '#fff',
-        outline: 'none',
-        fontSize: 14,
-        fontWeight: 700,
-        letterSpacing: props.maxLength === 8 ? '0.18em' : '0.01em',
-        textTransform: props.maxLength === 8 ? 'uppercase' : 'none',
-        boxShadow: focused ? '0 0 0 3px rgba(255,255,255,0.06)' : 'none',
-        transition: 'border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease',
-      }}
-    />
+    <div style={{ display: 'grid', gap: 5 }}>
+      <input
+        {...props}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        style={{
+          width: '100%',
+          padding: '13px 15px',
+          borderRadius: 15,
+          border: hasError
+            ? '1px solid rgba(255,107,107,0.70)'
+            : `1px solid ${focused ? 'rgba(255,255,255,0.34)' : 'rgba(255,255,255,0.12)'}`,
+          background: hasError
+            ? 'rgba(255,107,107,0.08)'
+            : focused ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.07)',
+          color: '#fff',
+          outline: 'none',
+          fontSize: 14,
+          fontWeight: 700,
+          letterSpacing: props.maxLength === 6 ? '0.18em' : '0.01em',
+          textTransform: props.maxLength === 6 ? 'uppercase' : 'none',
+          boxShadow: hasError
+            ? '0 0 0 3px rgba(255,107,107,0.12)'
+            : focused ? '0 0 0 3px rgba(255,255,255,0.06)' : 'none',
+          transition: 'border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease',
+          boxSizing: 'border-box',
+        }}
+      />
+      {hasError && (
+        <div style={{
+          color: '#ffb3b3',
+          fontSize: 12,
+          fontWeight: 700,
+          paddingLeft: 4,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 4,
+        }}>
+          ⚠ {error}
+        </div>
+      )}
+    </div>
   );
 }
 
