@@ -200,6 +200,11 @@ public class AdminController {
             GameState state = gameStateService.getState(gameId);
             if (state == null) throw GameException.gameNotFound();
 
+            if (state.isHostConnected()) {
+                log.info("Host zaten bağlı, tekrar broadcast edilmiyor: gameId={}", gameId);
+                return;
+            }
+
             state.setHostConnected(true);
             gameStateService.saveState(state);
 
