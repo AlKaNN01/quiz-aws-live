@@ -59,6 +59,7 @@ services:
       ENGINE_TOKEN: ${ENGINE_TOKEN:-dev-engine-token-change-in-prod}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000,http://localhost}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
     ports:
       - "8080:8080"
     depends_on:

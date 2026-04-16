@@ -32,6 +32,9 @@ app:
     jwt-expiration-ms: 86400000
     engine-token: ${ENGINE_TOKEN:local-engine-token-secret}
 
+groq:
+  api-key: ${GROQ_API_KEY:}
+
 # Management / Actuator Configuration
 management:
   endpoints:

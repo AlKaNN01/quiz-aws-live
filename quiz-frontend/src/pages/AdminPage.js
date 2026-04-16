@@ -245,6 +245,15 @@ export default function AdminPage() {
   // WS komutuna cevap gelene kadar butonları disable eder (çift tık / hızlı tık koruması)
   const [wsActionPending, setWsActionPending] = useState(false);
 
+  // ── AI Quiz oluşturma ───────────────────────────────────────
+  const [aiModal, setAiModal] = useState(false);
+  const [aiTopic, setAiTopic] = useState("");
+  const [aiCount, setAiCount] = useState(10);
+  const [aiTimer, setAiTimer] = useState(20);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiPreview, setAiPreview] = useState(null); // üretilen sorular listesi
+  const [aiError, setAiError] = useState("");
+
   const stompRef = useRef(null);
   const autoRef = useRef(null);
   const nextQRef = useRef(null);
@@ -316,6 +325,49 @@ export default function AdminPage() {
     );
     setNewGameTitle("");
     fetchGames();
+  };
+
+  const generateAiQuiz = async () => {
+    if (!aiTopic.trim()) return;
+    setAiLoading(true);
+    setAiError("");
+    setAiPreview(null);
+    try {
+      const questions = await apiFetch("/api/ai/generate", "POST", {
+        topic: aiTopic.trim(),
+        questionCount: aiCount,
+        timerSeconds: aiTimer,
+      });
+      setAiPreview(questions);
+    } catch {
+      setAiError("AI ile bağlantı kurulamadı. Lütfen tekrar deneyin.");
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const saveAiQuiz = async () => {
+    if (!aiPreview?.length) return;
+    setAiLoading(true);
+    try {
+      const game = await apiFetch("/api/games", "POST", { title: aiTopic.trim() });
+      for (let i = 0; i < aiPreview.length; i++) {
+        await apiFetch(`/api/games/${game.id}/questions`, "POST", {
+          ...aiPreview[i],
+          timerSeconds: aiTimer,
+          orderIndex: i + 1,
+        });
+      }
+      fetchGames();
+      setAiModal(false);
+      setAiTopic("");
+      setAiPreview(null);
+      setAiError("");
+    } catch {
+      setAiError("Sorular kaydedilemedi.");
+    } finally {
+      setAiLoading(false);
+    }
   };
 
   const deleteGame = async (id) => {
@@ -849,6 +901,83 @@ export default function AdminPage() {
         </div>
       )}
 
+      {/* ── AI Quiz oluşturma modal ── */}
+      {aiModal && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+          <div style={{ background:"#fff", borderRadius:16, padding:28, width:"100%", maxWidth:680, boxShadow:"0 12px 48px rgba(0,0,0,0.3)", maxHeight:"90vh", overflowY:"auto" }}>
+            <h3 style={{ margin:"0 0 4px", fontSize:18 }}>✨ AI ile Quiz Oluştur</h3>
+            <p style={{ margin:"0 0 20px", fontSize:13, color:"#888" }}>Konu ve soru sayısını gir, Gemini senin için quiz hazırlasın.</p>
+
+            {/* Form */}
+            {!aiPreview && (
+              <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+                <div>
+                  <label style={{ fontSize:13, fontWeight:600, color:"#444", display:"block", marginBottom:4 }}>Konu</label>
+                  <Inp value={aiTopic} onChange={setAiTopic} placeholder="Örn: Osmanlı Tarihi, Matematik, İngilizce..." />
+                </div>
+                <div style={{ display:"flex", gap:12 }}>
+                  <div style={{ flex:1 }}>
+                    <label style={{ fontSize:13, fontWeight:600, color:"#444", display:"block", marginBottom:4 }}>Soru Sayısı</label>
+                    <select value={aiCount} onChange={e => setAiCount(Number(e.target.value))}
+                      style={{ width:"100%", padding:"8px 12px", borderRadius:8, border:"1px solid #ddd", fontSize:14 }}>
+                      {[5,8,10,15,20].map(n => <option key={n} value={n}>{n} soru</option>)}
+                    </select>
+                  </div>
+                  <div style={{ flex:1 }}>
+                    <label style={{ fontSize:13, fontWeight:600, color:"#444", display:"block", marginBottom:4 }}>Süre / Soru</label>
+                    <select value={aiTimer} onChange={e => setAiTimer(Number(e.target.value))}
+                      style={{ width:"100%", padding:"8px 12px", borderRadius:8, border:"1px solid #ddd", fontSize:14 }}>
+                      {[10,15,20,30,45,60].map(n => <option key={n} value={n}>{n} saniye</option>)}
+                    </select>
+                  </div>
+                </div>
+                {aiError && <div style={{ background:"#fff0f0", border:"1px solid #fcc", padding:"8px 12px", borderRadius:8, fontSize:13, color:"#c00" }}>⚠ {aiError}</div>}
+                <div style={{ display:"flex", justifyContent:"flex-end", gap:10, marginTop:4 }}>
+                  <Btn onClick={() => { setAiModal(false); setAiTopic(""); setAiError(""); }} color="#888">İptal</Btn>
+                  <Btn onClick={generateAiQuiz} color="#7c3aed" disabled={aiLoading || !aiTopic.trim()}>
+                    {aiLoading ? "Oluşturuluyor..." : "✨ Oluştur"}
+                  </Btn>
+                </div>
+              </div>
+            )}
+
+            {/* Önizleme */}
+            {aiPreview && (
+              <div>
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
+                  <span style={{ fontSize:14, fontWeight:600, color:"#444" }}>{aiPreview.length} soru üretildi — inceleyip onaylayabilirsin.</span>
+                  <button onClick={() => setAiPreview(null)} style={{ background:"none", border:"none", cursor:"pointer", color:"#888", fontSize:13 }}>← Geri</button>
+                </div>
+                <div style={{ display:"flex", flexDirection:"column", gap:10, marginBottom:16 }}>
+                  {aiPreview.map((q, i) => (
+                    <div key={i} style={{ background:"#f8f7ff", border:"1px solid #e0d9ff", borderRadius:10, padding:14 }}>
+                      <div style={{ fontWeight:600, fontSize:14, marginBottom:8, color:"#1a1a2e" }}>{i+1}. {q.text}</div>
+                      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6 }}>
+                        {["A","B","C","D"].map(opt => (
+                          <div key={opt} style={{ fontSize:13, padding:"5px 10px", borderRadius:6,
+                            background: q.correctAnswer === opt ? "#d4edda" : "#f0f0f0",
+                            border: q.correctAnswer === opt ? "1px solid #28a745" : "1px solid #ddd",
+                            color: q.correctAnswer === opt ? "#155724" : "#444",
+                            fontWeight: q.correctAnswer === opt ? 600 : 400 }}>
+                            {opt}) {q[`option${opt}`]}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {aiError && <div style={{ background:"#fff0f0", border:"1px solid #fcc", padding:"8px 12px", borderRadius:8, fontSize:13, color:"#c00", marginBottom:10 }}>⚠ {aiError}</div>}
+                <div style={{ display:"flex", justifyContent:"flex-end", gap:10 }}>
+                  <Btn onClick={() => { setAiModal(false); setAiTopic(""); setAiPreview(null); setAiError(""); }} color="#888">İptal</Btn>
+                  <Btn onClick={generateAiQuiz} color="#555" disabled={aiLoading}>{aiLoading ? "..." : "Yeniden Üret"}</Btn>
+                  <Btn onClick={saveAiQuiz} color="#28a745" disabled={aiLoading}>{aiLoading ? "Kaydediliyor..." : "✓ Onayla ve Kaydet"}</Btn>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ═══ SOL PANEL — Quiz Kütüphanesi ═══ */}
       <div
         style={{
@@ -922,7 +1051,7 @@ export default function AdminPage() {
           )}
 
           {/* Yeni quiz oluştur */}
-          <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+          <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
             <Inp
               value={newGameTitle}
               onChange={setNewGameTitle}
@@ -932,6 +1061,24 @@ export default function AdminPage() {
               + Oluştur
             </Btn>
           </div>
+          <button
+            onClick={() => { setAiModal(true); setAiPreview(null); setAiError(""); }}
+            style={{
+              width: "100%",
+              padding: "9px 0",
+              marginBottom: 14,
+              borderRadius: 8,
+              border: "2px dashed #a78bfa",
+              background: "linear-gradient(135deg,#f3f0ff,#ede9fe)",
+              color: "#7c3aed",
+              fontWeight: 700,
+              fontSize: 13,
+              cursor: "pointer",
+              letterSpacing: 0.3,
+            }}
+          >
+            ✨ AI ile Quiz Oluştur
+          </button>
 
           {games.length === 0 && (
             <p style={{ color: "#aaa", textAlign: "center", marginTop: 30 }}>

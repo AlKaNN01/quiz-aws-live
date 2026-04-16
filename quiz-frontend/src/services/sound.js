@@ -22,10 +22,11 @@ const N = {
 
 class SoundService {
   constructor() {
-    this.ctx        = null;
-    this.master     = null;
-    this.compressor = null;
-    this._bgStop    = null;
+    this.ctx          = null;
+    this.master       = null;
+    this.compressor   = null;
+    this._bgStop      = null;
+    this._lastBgMethod = null; // 'lobby' | 'question' | null
     // Varsayılan: sessiz (localStorage yoksa muted=true)
     const saved = localStorage.getItem('quiz_mute');
     this._muted = saved === null ? true : saved !== '0';
@@ -44,7 +45,14 @@ class SoundService {
         0.05,
       );
     }
+    if (!this._muted) this.restartCurrentBg();
     return this._muted;
+  }
+
+  /** Mevcut ekran için bg müziğini yeniden başlatır (unmute / init sonrası) */
+  restartCurrentBg() {
+    if (this._lastBgMethod === 'lobby')    this.startLobby();
+    else if (this._lastBgMethod === 'question') this.startQuestion();
   }
 
   /**
@@ -77,6 +85,8 @@ class SoundService {
       document.addEventListener('touchstart', this._resumeBound, { passive: true });
 
       this._resume();
+      // Yeni ctx oluşturuldu — mute değilse mevcut ekranın sesini başlat
+      if (!this._muted) this.restartCurrentBg();
     } catch (e) {
       console.warn('Web Audio API desteklenmiyor:', e);
     }
@@ -136,15 +146,17 @@ class SoundService {
 
   stopBg() {
     if (this._bgStop) { this._bgStop(); this._bgStop = null; }
+    this._lastBgMethod = null;
   }
 
   // ─────────────────────────────────────────────────────────────
   //  LOBİ MÜZİĞİ — 128 BPM, enerjik major, Kahoot tarzı
   // ─────────────────────────────────────────────────────────────
   startLobby() {
-    if (!this.ctx) return;
+    if (!this.ctx) { this._lastBgMethod = 'lobby'; return; }
     this._resume();
     this.stopBg();
+    this._lastBgMethod = 'lobby';
 
     const b   = 60 / 128;         // beat = 0.469s
     const e   = b / 2;            // eighth note
@@ -204,9 +216,10 @@ class SoundService {
   //  SORU ARKAPLAN — gergin ambient, dikkat odaklar
   // ─────────────────────────────────────────────────────────────
   startQuestion() {
-    if (!this.ctx) return;
+    if (!this.ctx) { this._lastBgMethod = 'question'; return; }
     this._resume();
     this.stopBg();
+    this._lastBgMethod = 'question';
 
     const b = 60 / 115;
     const pads = [
