@@ -938,7 +938,7 @@ function PlayerMuteBtn() {
   const [muted, setMuted] = React.useState(sound.muted);
   return (
     <button
-      onClick={() => setMuted(sound.toggleMute())}
+      onClick={() => { sound.init(); setMuted(sound.toggleMute()); }}
       title={muted ? "Sesi aç" : "Sesi kapat"}
       style={{
         position: "fixed",
