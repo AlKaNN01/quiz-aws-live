@@ -227,12 +227,17 @@ public class GameController {
             if (state != null && state.getStatus() == GameState.Status.QUESTION_ACTIVE) {
                 Map<String, Object> q = gameStateService.getQuestion(request.getGameId(), state.getCurrentQuestionIndex());
                 if (q != null) {
+                    Map<String, String> opts = new java.util.LinkedHashMap<>();
+                    opts.put("A", q.getOrDefault("optionA", "").toString());
+                    opts.put("B", q.getOrDefault("optionB", "").toString());
+                    opts.put("C", q.getOrDefault("optionC", "").toString());
+                    opts.put("D", q.getOrDefault("optionD", "").toString());
                     currentQuestion = Map.of(
                         "questionId",    state.getCurrentQuestionId(),
                         "questionIndex", state.getCurrentQuestionIndex(),
                         "totalQuestions",state.getTotalQuestions(),
                         "questionText",  q.getOrDefault("text", ""),
-                        "options",       q.getOrDefault("options", Map.of()),
+                        "options",       opts,
                         "timerSeconds",  state.getTimerSeconds(),
                         "startedAt",     state.getQuestionStartedAt()
                     );
@@ -245,6 +250,7 @@ public class GameController {
                     .totalScore(totalScore)
                     .gameStatus(state != null ? state.getStatus().name() : "UNKNOWN")
                     .serverTime(System.currentTimeMillis())
+                    .playerCount(gameSessionService.getPlayerCount(request.getGameId()))
                     .currentQuestion(currentQuestion)
                     .build());
 
