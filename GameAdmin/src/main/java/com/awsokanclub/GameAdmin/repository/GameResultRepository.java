@@ -16,6 +16,6 @@ public interface GameResultRepository extends JpaRepository<GameResult, Long> {
     List<GameResult> findByGameIdOrderByRankAsc(Long gameId);
 
     @Modifying
-    @Query("DELETE FROM GameResult gr WHERE gr.createdAt < :cutoff")
+    @Query("DELETE FROM GameResult gr WHERE gr.finishedAt < :cutoff")
     int deleteOldResults(@Param("cutoff") LocalDateTime cutoff);
 }
