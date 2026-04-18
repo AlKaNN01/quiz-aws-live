@@ -91,6 +91,11 @@ public class AnswerService {
         redisTemplate.expire(key, 24, TimeUnit.HOURS);
     }
 
+    public boolean hasAnswered(String gameId, String questionId, String userId) {
+        return Boolean.TRUE.equals(
+                redisTemplate.opsForSet().isMember("answered:" + gameId + ":" + questionId, userId));
+    }
+
     // Soru bittiginde hangi sikki kac kisi secti bilgisini dondurur.
     // QUESTION_END mesajindaki answerDistribution alani buradan doldurulur.
     public Map<Object, Object> getAnswerDistribution(String gameId, String questionId) {

@@ -232,14 +232,17 @@ public class GameController {
                     opts.put("B", q.getOrDefault("optionB", "").toString());
                     opts.put("C", q.getOrDefault("optionC", "").toString());
                     opts.put("D", q.getOrDefault("optionD", "").toString());
+                    boolean alreadyAnswered = answerService.hasAnswered(
+                            request.getGameId(), state.getCurrentQuestionId(), session.getUserId());
                     currentQuestion = Map.of(
-                        "questionId",    state.getCurrentQuestionId(),
-                        "questionIndex", state.getCurrentQuestionIndex(),
-                        "totalQuestions",state.getTotalQuestions(),
-                        "questionText",  q.getOrDefault("text", ""),
-                        "options",       opts,
-                        "timerSeconds",  state.getTimerSeconds(),
-                        "startedAt",     state.getQuestionStartedAt()
+                        "questionId",      state.getCurrentQuestionId(),
+                        "questionIndex",   state.getCurrentQuestionIndex(),
+                        "totalQuestions",  state.getTotalQuestions(),
+                        "questionText",    q.getOrDefault("text", ""),
+                        "options",         opts,
+                        "timerSeconds",    state.getTimerSeconds(),
+                        "startedAt",       state.getQuestionStartedAt(),
+                        "alreadyAnswered", alreadyAnswered
                     );
                 }
             }

@@ -237,17 +237,22 @@ export default function PlayerPage() {
                 timerSeconds:   q.timerSeconds,
                 startedAt:      q.startedAt,
               });
-              setSelectedAnswer(null);
-              answerSubmittedRef.current = false;
-              clearInterval(timerRef.current);
-              timerRef.current = setInterval(() => {
-                const now = Date.now() + clockOffsetRef.current;
-                const elapsed = Math.floor((now - q.startedAt) / 1000);
-                const left = Math.max(0, q.timerSeconds - elapsed);
-                setTimeLeft(left);
-                if (left === 0) clearInterval(timerRef.current);
-              }, 200);
-              setScreen(STATES.QUESTION);
+              if (q.alreadyAnswered) {
+                answerSubmittedRef.current = true;
+                setScreen(STATES.ANSWER_RECEIVED);
+              } else {
+                setSelectedAnswer(null);
+                answerSubmittedRef.current = false;
+                clearInterval(timerRef.current);
+                timerRef.current = setInterval(() => {
+                  const now = Date.now() + clockOffsetRef.current;
+                  const elapsed = Math.floor((now - q.startedAt) / 1000);
+                  const left = Math.max(0, q.timerSeconds - elapsed);
+                  setTimeLeft(left);
+                  if (left === 0) clearInterval(timerRef.current);
+                }, 200);
+                setScreen(STATES.QUESTION);
+              }
             }
           } else {
             // Session geçersiz — yeni oyun başlamış olabilir. localStorage temizle, anasayfaya yönlendir.
