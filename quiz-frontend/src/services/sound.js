@@ -163,7 +163,7 @@ class SoundService {
   }
 
   // ─────────────────────────────────────────────────────────────
-  //  LOBİ MÜZİĞİ — 128 BPM, enerjik major, Kahoot tarzı
+  //  LOBİ MÜZİĞİ — 76 BPM, sakin/relax ambient, yumuşak pad
   // ─────────────────────────────────────────────────────────────
   startLobby() {
     console.log(`[SND] startLobby: ctx=${!!this.ctx}, state=${this.ctx?.state}, muted=${this._muted}`);
@@ -172,54 +172,50 @@ class SoundService {
     this.stopBg();
     this._lastBgMethod = 'lobby';
 
-    const b   = 60 / 128;         // beat = 0.469s
-    const e   = b / 2;            // eighth note
+    const b   = 60 / 76;          // beat = 0.789s
     const now = () => this.ctx.currentTime + 0.05;
 
-    // Melodi: C majör, staccato
+    // Melodi: G majör pentatonik, legato ve yumuşak
     const mel = [
-      [N.E5, 0], [N.G5, 1], [N.E5, 2], [N.D5, 3],
-      [N.C5, 4], [N.E5, 5], [N.G5, 6], [N.C6, 7],
-      [N.B4, 8], [N.G5, 9], [N.E5,10], [N.D5,11],
-      [N.C5,12], [N.D5,13], [N.E5,14], [N.C5,15],
-    ];
-    // Bas: root oktavları
-    const bas = [
-      [N.C3, 0, 2], [N.G3, 2, 2], [N.F3, 4, 2], [N.G3, 6, 2],
-      [N.C3, 8, 2], [N.G3,10, 2], [N.F3,12, 2], [N.G3,14, 2],
-    ];
-    // Pad akorları
-    const pad = [
-      [N.C4, 0, 4, .040], [N.E4, 0, 4, .035], [N.G4, 0, 4, .030],
-      [N.G4, 4, 4, .040], [N.B4, 4, 4, .035], [N.D5, 4, 4, .030],
-      [N.F4, 8, 4, .040], [N.A4, 8, 4, .035], [N.C5, 8, 4, .030],
-      [N.G4,12, 4, .040], [N.B4,12, 4, .035], [N.D5,12, 4, .030],
+      [N.G4,  0, 1.5], [N.B4,  2, 1.5], [N.D5,  4, 2.0],
+      [N.E5,  6, 1.5], [N.D5,  8, 1.5], [N.B4, 10, 2.0],
+      [N.G4, 12, 1.5], [N.A4, 14, 1.5], [N.B4, 16, 2.5],
+      [N.D5, 19, 1.5], [N.E5, 21, 1.5], [N.G5, 23, 3.0],
     ];
 
-    const loopMs = 16 * e * 1000;
+    // Pad akorları: G maj → Em → C maj → D maj, uzun legato
+    const pad = [
+      [N.G3,  0, 6, .022], [N.B3,  0, 6, .018], [N.D4,  0, 6, .015],
+      [N.E3,  6, 6, .020], [N.G3,  6, 6, .018], [N.B3,  6, 6, .015],
+      [N.C3, 12, 6, .022], [N.E3, 12, 6, .018], [N.G3, 12, 6, .015],
+      [N.D3, 18, 6, .022], [N.Fs4,18, 6, .016], [N.A3, 18, 6, .014],
+    ];
+
+    // Bas: hafif, uzun tutulu
+    const bas = [
+      [N.G2,  0, 5], [N.E3,  6, 5],
+      [N.C3, 12, 5], [N.D3, 18, 5],
+    ];
+
+    const loopBeats = 26;
+    const loopMs    = loopBeats * b * 1000;
     let stopped = false;
     let tid;
 
     const play = () => {
       if (stopped || !this.ctx) return;
       const n0 = now();
-      // Melodi: staccato 8th notes
-      mel.forEach(([f, ei]) =>
-        this._n(f, n0 + ei * e, e * 0.55, 'square', 0.13, 0.004, 0.06));
-      // Bass: triangle
-      bas.forEach(([f, ei, bd]) =>
-        this._n(f, n0 + ei * e, bd * e * 0.8, 'triangle', 0.14, 0.01, 0.20));
-      // Pad: soft sine
-      pad.forEach(([f, ei, bd, v]) =>
-        this._n(f, n0 + ei * e, bd * e, 'sine', v, 0.15, 0.40));
-      // Hihat: her 8th notada gürültü patlaması
-      for (let i = 0; i < 16; i++)
-        this._noise(n0 + i * e, e * 0.25, i % 2 === 0 ? 0.04 : 0.02, 4000);
-      // Kick: 0, 4, 8, 12
-      [0, 4, 8, 12].forEach(i =>
-        this._n(N.C3 * 0.7, n0 + i * e, e * 0.4, 'sine', 0.18, 0.002, 0.20));
+      // Melodi: sine, legato, çok yumuşak
+      mel.forEach(([f, bt, bd]) =>
+        this._n(f, n0 + bt * b, bd * b, 'sine', 0.055, 0.08, 0.35));
+      // Pad: sine, çok uzun attack/release
+      pad.forEach(([f, bt, bd, v]) =>
+        this._n(f, n0 + bt * b, bd * b, 'sine', v, 0.30, 0.80));
+      // Bas: triangle, çok hafif
+      bas.forEach(([f, bt, bd]) =>
+        this._n(f, n0 + bt * b, bd * b, 'triangle', 0.045, 0.12, 0.50));
 
-      tid = setTimeout(play, loopMs - 120);
+      tid = setTimeout(play, loopMs - 80);
     };
 
     play();

@@ -253,6 +253,13 @@ public class GameController {
                     .currentQuestion(currentQuestion)
                     .build());
 
+            if (state != null && state.getStatus() == GameState.Status.WAITING) {
+                gameEventPublisher.broadcastToGame(request.getGameId(),
+                        WaitingRoomUpdate.builder()
+                                .playerCount(gameSessionService.getPlayerCount(request.getGameId()))
+                                .build());
+            }
+
             log.info("Oyuncu yeniden bağlandı: {}", session.getNickname());
 
         } catch (GameException e) {
