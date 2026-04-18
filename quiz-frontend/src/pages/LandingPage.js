@@ -276,7 +276,7 @@ export default function LandingPage() {
             }}>
               <div>
                 <div style={pillStyle}>
-                  Istanbul Okan University
+                  İstanbul Okan Üniversitesi
                 </div>
 
                 <h1 style={{
@@ -288,7 +288,7 @@ export default function LandingPage() {
                   fontWeight: 900,
                   maxWidth: 620,
                 }}>
-                  AWS Cloud Clubs
+                  AWS Cloud Club
                   <span style={{
                     display: 'block',
                     marginTop: 12,
@@ -297,7 +297,7 @@ export default function LandingPage() {
                     letterSpacing: '0.02em',
                     textTransform: 'uppercase',
                   }}>
-                    Quiz Night
+                    QUIZ NIGHT
                   </span>
                 </h1>
 
@@ -309,8 +309,8 @@ export default function LandingPage() {
                   lineHeight: 1.65,
                   fontWeight: 600,
                 }}>
-                  AWS Cloud Club ruhunu sahneye tasiyan eglenceli quizimize hoş geldiniz!
-                  Oyuncu olarak katilip dereceye girersen ödülleri kazanmaya hak kazanabilirsin.
+                  AWS Cloud Club ruhunu sahneye taşıyan eğlenceli quizimize hoş geldiniz!
+                  Oyuncu olarak katılıp dereceye girersen ödülleri kazanmaya hak kazanabilirsin.
                 </p>
 
                 <div style={{
@@ -434,8 +434,8 @@ export default function LandingPage() {
           fontWeight: 700,
           letterSpacing: '0.03em',
         }}>
-          <span>AWS Cloud Club x Istanbul Okan University</span>
-          <span>Powered by Fluffy!</span>
+          <span>AWS Cloud Club x İstanbul Okan Üniversitesi</span>
+          <span>Fluffy ile güçlendirildi!</span>
         </div>
       </div>
 

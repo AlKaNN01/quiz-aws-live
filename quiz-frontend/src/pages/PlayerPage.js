@@ -64,6 +64,7 @@ export default function PlayerPage() {
   const retryJoinRef = useRef(null);
   const answerSubmittedRef = useRef(false);
   const lobbyWaitingRef = useRef(false);
+  const reconnectSentRef = useRef(false);
 
   useEffect(() => {
     sessionRef.current = session;
@@ -223,9 +224,31 @@ export default function PlayerPage() {
           if (msg.success) {
             if (msg.serverTime) clockOffsetRef.current = msg.serverTime - Date.now();
             setError(null);
-            // gameStatus'a göre doğru ekrana geç
-            if (msg.gameStatus === "WAITING") setScreen(STATES.WAITING);
-            // Diğer durumlar (QUESTION_ACTIVE vb.) ilgili broadcast event'lerle zaten güncellenir
+            if (msg.gameStatus === "WAITING") {
+              setScreen(STATES.WAITING);
+            } else if (msg.gameStatus === "QUESTION_ACTIVE" && msg.currentQuestion) {
+              const q = msg.currentQuestion;
+              setQuestion({
+                questionId:     q.questionId,
+                questionIndex:  q.questionIndex,
+                totalQuestions: q.totalQuestions,
+                text:           q.questionText,
+                options:        q.options,
+                timerSeconds:   q.timerSeconds,
+                startedAt:      q.startedAt,
+              });
+              setSelectedAnswer(null);
+              answerSubmittedRef.current = false;
+              clearInterval(timerRef.current);
+              timerRef.current = setInterval(() => {
+                const now = Date.now() + clockOffsetRef.current;
+                const elapsed = Math.floor((now - q.startedAt) / 1000);
+                const left = Math.max(0, q.timerSeconds - elapsed);
+                setTimeLeft(left);
+                if (left === 0) clearInterval(timerRef.current);
+              }, 200);
+              setScreen(STATES.QUESTION);
+            }
           } else {
             // Session geçersiz — yeni oyun başlamış olabilir. localStorage temizle, anasayfaya yönlendir.
             localStorage.removeItem("quiz_session_" + gameId);
@@ -308,14 +331,16 @@ export default function PlayerPage() {
 
         if (savedSession?.sessionId) {
           if (!sessionRef.current) {
-            // localStorage'dan geri yükle — sayfa reload durumu
             sessionRef.current = savedSession;
             setSession(savedSession);
           }
-          client.publish({
-            destination: "/app/game.reconnect",
-            body: JSON.stringify({ gameId, sessionId: savedSession.sessionId }),
-          });
+          if (!reconnectSentRef.current) {
+            reconnectSentRef.current = true;
+            client.publish({
+              destination: "/app/game.reconnect",
+              body: JSON.stringify({ gameId, sessionId: savedSession.sessionId }),
+            });
+          }
           return;
         }
 
@@ -365,8 +390,9 @@ export default function PlayerPage() {
         }
       },
       onDisconnect: () => {
+        reconnectSentRef.current = false;
         if (screenRef.current !== STATES.BANNED) {
-          setError("Sunucu baglantisi kesildi. Yeniden baglaniliyor...");
+          setError("Sunucu bağlantısı kesildi. Yeniden bağlanılıyor...");
         }
       },
     });
@@ -376,7 +402,7 @@ export default function PlayerPage() {
 
     // Mobil: ekran kilidi/arka plan sonrası sayfa tekrar görünür olunca yeniden bağlan
     const handleVisibilityChange = () => {
-      if (!document.hidden && stompRef.current && !stompRef.current.connected) {
+      if (!document.hidden && stompRef.current && !stompRef.current.connected && !stompRef.current.active) {
         if (screenRef.current !== STATES.BANNED) {
           stompRef.current.activate();
         }
@@ -542,15 +568,15 @@ export default function PlayerPage() {
         <FocusCard>
           <CenterStack>
             <StatusCloud />
-            <Eyebrow>Join in progress</Eyebrow>
-            <HeroTitle>Sunucuya baglaniliyor</HeroTitle>
+            <Eyebrow>Katılım devam ediyor</Eyebrow>
+            <HeroTitle>Sunucuya bağlanılıyor</HeroTitle>
             <BodyText narrow>
-              {nickname} olarak <strong>{gameId}</strong> odasina giris
-              yapiliyor.
+              {nickname} olarak <strong>{gameId}</strong> odasına giriş
+              yapılıyor.
             </BodyText>
             {error && <InlineError>{error}</InlineError>}
             <TinyMeta>
-              Kisa bir gecikme olursa istek otomatik tekrar gonderilir.
+              Kısa bir gecikme olursa istek otomatik tekrar gönderilir.
             </TinyMeta>
           </CenterStack>
         </FocusCard>
@@ -566,9 +592,9 @@ export default function PlayerPage() {
             <TopBadge>Lobby</TopBadge>
             <HeroTitle>Bekleme odasi</HeroTitle>
             <BodyText narrow>
-              Host oyunu baslatana kadar tum oyuncular burada toplanir.
+              Host oyunu başlatana kadar tüm oyuncular burada toplanır.
             </BodyText>
-            <MetricOrb value={playerCount} label="oyuncu baglandi" />
+            <MetricOrb value={playerCount} label="oyuncu bağlandı" />
             <InfoRow>
               <InfoPill label="Kod" value={gameId} />
               <InfoPill label="Sen" value={nickname} />
@@ -585,10 +611,10 @@ export default function PlayerPage() {
       <PlayerShell>
         <FocusCard accent="rgba(255, 153, 0, 0.32)">
           <CenterStack>
-            <TopBadge>Starting</TopBadge>
-            <HeroTitle>Hazir ol</HeroTitle>
+            <TopBadge>Başlıyor</TopBadge>
+            <HeroTitle>Hazır ol</HeroTitle>
             <CountdownRing value={countdown} />
-            <BodyText narrow>Ilk soru birazdan ekranda olacak.</BodyText>
+            <BodyText narrow>İlk soru birazdan ekranda olacak.</BodyText>
           </CenterStack>
         </FocusCard>
       </PlayerShell>
@@ -676,7 +702,7 @@ export default function PlayerPage() {
         <FocusCard accent="rgba(68, 209, 141, 0.28)">
           <CenterStack>
             <StatusCloud tone="success" />
-            <Eyebrow>Submission locked</Eyebrow>
+            <Eyebrow>Cevap gönderildi</Eyebrow>
             <HeroTitle>Cevabın alındı</HeroTitle>
             {streak >= 2 && (
               <div
@@ -698,7 +724,7 @@ export default function PlayerPage() {
                   : "⚡ 2 STREAK! +100 bonus"}
               </div>
             )}
-            <BodyText narrow>Diger oyuncularin cevaplari bekleniyor.</BodyText>
+            <BodyText narrow>Diğer oyuncuların cevapları bekleniyor.</BodyText>
           </CenterStack>
         </FocusCard>
       </PlayerShell>
@@ -712,7 +738,7 @@ export default function PlayerPage() {
       <PlayerShell>
         <QuestionCard>
           <HeaderRow>
-            <MetaPill>Sure doldu</MetaPill>
+            <MetaPill>Süre doldu</MetaPill>
             <MetaPill tone="accent">
               Doğru cevap: {questionEnd.correctAnswer}
             </MetaPill>
@@ -768,7 +794,7 @@ export default function PlayerPage() {
               image={answerReveal.isCorrect ? happyFluffyImage : sadFluffyImage}
             />
             <Eyebrow>
-              {answerReveal.isCorrect ? "Great hit" : "Next round"}
+              {answerReveal.isCorrect ? "Harika!" : "Sıradaki tur"}
             </Eyebrow>
             <HeroTitle>
               {answerReveal.isCorrect ? "Doğru cevap" : "Bu tur olmadı"}
@@ -816,10 +842,10 @@ export default function PlayerPage() {
             <ScoreChange>Bu tur +{scoreReveal.pointsEarned}</ScoreChange>
           </ScorePanel>
 
-          <ListTitle>Top 10</ListTitle>
+          <ListTitle>İlk 10</ListTitle>
           <LeaderboardList>
             {scoreReveal.top10.length === 0 ? (
-              <MutedText>Henuz siralama yok.</MutedText>
+              <MutedText>Henüz sıralama yok.</MutedText>
             ) : (
               scoreReveal.top10.map((p, i) => (
                 <LeaderboardRow

@@ -31,8 +31,11 @@ public class Game {
     @Column(nullable = false)
     private Status status;
 
-    @Column(name = "created_at")
+    @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
+
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
 
     @OneToMany(mappedBy = "game", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("orderIndex ASC")
@@ -41,7 +44,13 @@ public class Game {
     @PrePersist
     public void prePersist() {
         createdAt = LocalDateTime.now();
+        updatedAt = LocalDateTime.now();
         if (status == null) status = Status.DRAFT;
+    }
+
+    @PreUpdate
+    public void preUpdate() {
+        updatedAt = LocalDateTime.now();
     }
 
     public enum Status {

@@ -405,7 +405,7 @@ export default function HostPage() {
           <HostSubtle
             style={{ maxWidth: 440, marginLeft: "auto", marginRight: "auto" }}
           >
-            İlk soru birazdan başlıyacak. Oyuncular hazır.
+            İlk soru birazdan başlayacak. Oyuncular hazır.
           </HostSubtle>
           <div
             style={{

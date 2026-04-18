@@ -223,12 +223,29 @@ public class GameController {
             GameState state = gameStateService.getState(request.getGameId());
             int totalScore = leaderboardService.getUserScore(request.getGameId(), session.getUserId());
 
+            Map<String, Object> currentQuestion = null;
+            if (state != null && state.getStatus() == GameState.Status.QUESTION_ACTIVE) {
+                Map<String, Object> q = gameStateService.getQuestion(request.getGameId(), state.getCurrentQuestionIndex());
+                if (q != null) {
+                    currentQuestion = Map.of(
+                        "questionId",    state.getCurrentQuestionId(),
+                        "questionIndex", state.getCurrentQuestionIndex(),
+                        "totalQuestions",state.getTotalQuestions(),
+                        "questionText",  q.getOrDefault("text", ""),
+                        "options",       q.getOrDefault("options", Map.of()),
+                        "timerSeconds",  state.getTimerSeconds(),
+                        "startedAt",     state.getQuestionStartedAt()
+                    );
+                }
+            }
+
             gameEventPublisher.sendToUser(sessionId, ReconnectAck.builder()
                     .success(true)
                     .sessionId(session.getSessionId())
                     .totalScore(totalScore)
                     .gameStatus(state != null ? state.getStatus().name() : "UNKNOWN")
                     .serverTime(System.currentTimeMillis())
+                    .currentQuestion(currentQuestion)
                     .build());
 
             log.info("Oyuncu yeniden bağlandı: {}", session.getNickname());
