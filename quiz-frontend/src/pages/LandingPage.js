@@ -259,7 +259,7 @@ export default function LandingPage() {
                 }}>
                   <span>Aws</span>
                   <span>Cloud</span>
-                  <span>Clubs</span>
+                  <span>Club</span>
                 </div>
               </div>
               <span style={sparkStyle('8%', '86%')}>✦</span>

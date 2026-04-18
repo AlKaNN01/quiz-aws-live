@@ -250,7 +250,6 @@ public class GameController {
                     .totalScore(totalScore)
                     .gameStatus(state != null ? state.getStatus().name() : "UNKNOWN")
                     .serverTime(System.currentTimeMillis())
-                    .playerCount(gameSessionService.getPlayerCount(request.getGameId()))
                     .currentQuestion(currentQuestion)
                     .build());
 

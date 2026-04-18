@@ -223,7 +223,6 @@ export default function PlayerPage() {
         case "RECONNECT_ACK":
           if (msg.success) {
             if (msg.serverTime) clockOffsetRef.current = msg.serverTime - Date.now();
-            if (msg.playerCount != null) setPlayerCount(msg.playerCount);
             setError(null);
             if (msg.gameStatus === "WAITING") {
               setScreen(STATES.WAITING);
